@@ -736,6 +736,7 @@ async function addPhotos(files,meta={}){
         id, caption:'', thumb:thumbDataURL, mime:'image/jpeg', uploadedAt:new Date().toISOString(), dropboxPath:null,
         supplierId:meta.supplierId||null, appointmentId:meta.appointmentId||null,
         motivblattId:meta.motivblattId||null, untermotivId:meta.untermotivId||null,
+        printSize:1, // Anzeigegröße im Motivblatt-Ausdruck: 1=Normal, 2=Groß, 3=Sehr groß
       };
       state.photos.push(photo);
       added.push(photo);
@@ -1463,6 +1464,9 @@ function renderUntermotivCard(mb,u){
           <button class="pdel" data-action="del-photo" data-id="${p.id}" title="Löschen">${ic('close')}</button>
         </div>
         <input data-caption-id="${p.id}" value="${escapeAttr(p.caption||'')}" placeholder="Bildtext" style="width:100%;font-size:11.5px;padding:5px 6px;margin-top:4px">
+        <select data-size-id="${p.id}" title="Druckgröße" style="width:100%;font-size:11px;padding:4px 6px;margin-top:3px">
+          ${Object.entries(PHOTO_SIZE_INFO).map(([k,info])=>`<option value="${k}" ${(p.printSize||1)==k?'selected':''}>${escapeHtml(info.label)}</option>`).join('')}
+        </select>
       </div>`).join('')}</div>`:''}
     <div class="field"><label>Anpassungen am Motiv / Notizen (eine Zeile = ein Punkt)</label><textarea data-ufield="notes" rows="4" placeholder="z.B.&#10;Kassen 1,2,3 werden bespielt&#10;EC-Gerät wird evtl. ausgetauscht">${escapeHtml(u.notes||'')}</textarea></div>
   </div>`;
@@ -1544,6 +1548,12 @@ function bindMotivblattEditEvents(mb){
         p.caption=inp.value; debouncedSavePhotos();
       });
     });
+    card.querySelectorAll('[data-size-id]').forEach(sel=>{
+      sel.addEventListener('change',()=>{
+        const p=state.photos.find(x=>x.id===sel.dataset.sizeId); if(!p) return;
+        p.printSize=parseInt(sel.value,10); savePhotos();
+      });
+    });
     const zone=card.querySelector('.drop-zone');
     const fileInp=card.querySelector('.mb-photo-file');
     if(zone&&fileInp){
@@ -1618,8 +1628,29 @@ async function upgradeMotivblattPrintPhotos(){
 // Fotos werden nie verkleinert. Erste Seite eines Untermotivs trägt den vollen Kopf
 // (Titel/Motiv/Adresse/Logo) und hat daher weniger Platz für Fotos; Fortsetzungsseiten
 // zeigen nur noch den Untermotiv-Kasten und fassen entsprechend mehr Fotos.
-const MB_PHOTOS_FIRST_PAGE = 6;
-const MB_PHOTOS_CONT_PAGE = 12;
+// Jedes Foto hat eine Größenstufe (photo.printSize); größere Fotos "kosten" mehr vom
+// Platz-Budget einer Seite, damit z.B. kleinteilige Pläne größer (und lesbar) gedruckt
+// werden können, ohne dass andere Fotos deswegen verkleinert werden müssen.
+const PHOTO_SIZE_INFO = {
+  1:{label:'Normal', span:1, height:140, cost:1},
+  2:{label:'Groß', span:2, height:230, cost:3},
+  3:{label:'Sehr groß', span:3, height:340, cost:6},
+};
+function photoSizeInfo(p){ return PHOTO_SIZE_INFO[p?.printSize]||PHOTO_SIZE_INFO[1]; }
+const MB_BUDGET_FIRST_PAGE = 6;
+const MB_BUDGET_CONT_PAGE = 12;
+function chunkPhotosByBudget(photos, firstBudget, contBudget){
+  const chunks=[]; let current=[]; let used=0; let budget=firstBudget;
+  photos.forEach(p=>{
+    const cost=photoSizeInfo(p).cost;
+    if(current.length && used+cost>budget){
+      chunks.push(current); current=[]; used=0; budget=contBudget;
+    }
+    current.push(p); used+=cost;
+  });
+  if(current.length) chunks.push(current);
+  return chunks.length?chunks:[[]];
+}
 function renderMotivblattPrint(){
   const el=document.getElementById('view-motivblatt-print');
   const mb=state.motivblaetter.find(x=>x.id===state.printMotivblattId);
@@ -1628,17 +1659,7 @@ function renderMotivblattPrint(){
   const sheets=[];
   untermotive.forEach(u=>{
     const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id);
-    const chunks=[];
-    if(photos.length<=MB_PHOTOS_FIRST_PAGE){
-      chunks.push(photos);
-    }else{
-      chunks.push(photos.slice(0,MB_PHOTOS_FIRST_PAGE));
-      let rest=photos.slice(MB_PHOTOS_FIRST_PAGE);
-      while(rest.length){
-        chunks.push(rest.slice(0,MB_PHOTOS_CONT_PAGE));
-        rest=rest.slice(MB_PHOTOS_CONT_PAGE);
-      }
-    }
+    const chunks=chunkPhotosByBudget(photos, MB_BUDGET_FIRST_PAGE, MB_BUDGET_CONT_PAGE);
     chunks.forEach((chunk,idx)=>{
       const hideHeader=idx>0;
       const uPart=chunks.length>1
@@ -1653,7 +1674,7 @@ function renderMotivblattPrint(){
         <button class="btn btn-sm" data-action="set-view" data-view="motivblatt-edit">${ic('back')} Zurück zum Bearbeiten</button>
         <button class="btn btn-primary btn-sm" data-action="do-print">${ic('download')} Als PDF drucken/speichern</button>
       </div>
-      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Jede Seite ist fix im DIN-A4-Format. Fotos werden nie verkleinert, um mehr auf eine Seite zu quetschen — bei zu vielen Fotos pro Untermotiv wird automatisch eine Fortsetzungsseite angelegt (ohne Kopfbereich, dafür mit mehr Platz für Fotos). Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" wählen (nicht „An Seite anpassen"), damit das erhalten bleibt.</div>
+      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Jede Seite ist fix im DIN-A4-Format. Fotos werden nie verkleinert, um mehr auf eine Seite zu quetschen — bei zu vielen Fotos pro Untermotiv wird automatisch eine Fortsetzungsseite angelegt (ohne Kopfbereich, dafür mit mehr Platz für Fotos). Für kleinteilige Pläne o.ä. lässt sich die Größe einzelner Fotos beim Bearbeiten auf „Groß"/„Sehr groß" stellen. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" wählen (nicht „An Seite anpassen"), damit das erhalten bleibt.</div>
       ${sheets.join('')}
     </div>
   `;
@@ -1711,7 +1732,10 @@ function renderMotivblattSheetHTML(mb,u,photosOverride,hideHeader){
     ${headerHtml}
     ${(u.title||u.ref||photos.length||notesLines.length)?`<div class="mb-untermotiv-box">
       <div class="mb-untermotiv-head"><h3>${escapeHtml(u.title||'')}</h3>${u.ref?`<div class="mb-ref">${escapeHtml(u.ref)}</div>`:''}</div>
-      ${photos.length?`<div class="mb-photo-row">${photos.map(p=>`<div class="mb-photo"><img data-photo-id="${p.id}" src="${p.thumb}">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}</div>`).join('')}</div>`:''}
+      ${photos.length?`<div class="mb-photo-row">${photos.map(p=>{
+        const info=photoSizeInfo(p);
+        return `<div class="mb-photo" style="grid-column:span ${info.span}"><img data-photo-id="${p.id}" src="${p.thumb}" style="height:${info.height}px">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}</div>`;
+      }).join('')}</div>`:''}
       ${notesLines.length?`<ul class="mb-notes">${notesLines.map(l=>`<li>${escapeHtml(l.replace(/^[-•]\s*/,''))}</li>`).join('')}</ul>`:''}
     </div>`:''}
   </div>`;
