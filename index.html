@@ -201,6 +201,52 @@
   .search-bar input{border:none;background:transparent;flex:1;font:inherit;outline:none}
 
   .loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:10px;color:var(--ink-muted);font-size:13px}
+
+  /* ---- Motivblätter ---- */
+  .mb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .mb-card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);cursor:pointer;display:flex;flex-direction:column;gap:6px}
+  .mb-card:hover{border-color:var(--line-strong)}
+  .mb-card .mbname{font-family:Georgia,serif;font-size:16px}
+  .mb-card .mbmeta{font-size:12px;color:var(--ink-muted)}
+  .mb-untermotiv-card{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg-card);margin-bottom:10px}
+  .mb-contact-row{display:grid;grid-template-columns:.8fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px}
+  @media(max-width:720px){.mb-contact-row{grid-template-columns:1fr 1fr}}
+  .mb-logo-preview{width:100%;max-height:90px;object-fit:contain;background:var(--bg-sunk);border-radius:8px;padding:8px}
+
+  /* Druck-/Vorschau-Blatt: bewusst eigenes Farbschema, das die Vorlage nachbildet */
+  .mb-print-wrap{background:#e9edf0;padding:24px 0;min-height:100vh}
+  .mb-sheet{width:210mm;max-width:94vw;min-height:297mm;margin:0 auto 24px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.15);padding:14mm 12mm;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;color:#1a1a1a}
+  .diamond-banner{height:26px;background:
+      repeating-linear-gradient(45deg,#8ecae6 0 7px,transparent 7px 14px),
+      repeating-linear-gradient(-45deg,#8ecae6 0 7px,transparent 7px 14px);
+    background-color:#fff;border:1px solid #bfe3f5}
+  .mb-title{text-align:center;font-style:italic;font-size:38px;margin:10px 0;font-weight:600}
+  .mb-motiv-box{border:2px solid #6fb8dd;border-radius:2px;padding:10px 16px;margin:14px 0;text-align:center}
+  .mb-motiv-box h2{font-style:italic;font-size:26px;font-weight:600;margin:0}
+  .mb-info-row{display:flex;gap:14px;margin-bottom:14px}
+  .mb-address-box{flex:1;border:1px solid #6fb8dd;border-radius:2px;padding:12px 14px;font-size:13px;line-height:1.5}
+  .mb-logo-box{width:220px;flex:none;border:1px solid #6fb8dd;border-radius:2px;padding:12px;display:flex;align-items:center;justify-content:center}
+  .mb-logo-box img{max-width:100%;max-height:90px;object-fit:contain}
+  .mb-label{font-size:12px}
+  .mb-bold{font-weight:700}
+  .mb-untermotiv-box{border:2px solid #6fb8dd;border-radius:4px;background:#eaf6fc;padding:14px;margin-bottom:16px;page-break-inside:avoid}
+  .mb-untermotiv-head{background:#fff;border:1px solid #6fb8dd;border-radius:2px;padding:6px 14px;margin-bottom:12px}
+  .mb-untermotiv-head h3{font-style:italic;font-size:22px;font-weight:600;margin:0}
+  .mb-ref{font-size:12px;color:#444}
+  .mb-photo-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .mb-photo{flex:1 1 30%;min-width:140px}
+  .mb-photo img{width:100%;height:140px;object-fit:cover;border-radius:2px;display:block}
+  .mb-caption{font-size:11px;color:#333;margin-top:3px;text-align:center}
+  .mb-notes{font-size:13px;line-height:1.5;margin:0;padding-left:18px}
+  .mb-notes li{margin-bottom:4px}
+  .mb-sheet-toolbar{max-width:210mm;margin:0 auto 12px;display:flex;justify-content:space-between;gap:8px}
+
+  @media print{
+    header.topbar, .no-print{display:none!important}
+    main{padding:0!important;max-width:none!important}
+    .mb-print-wrap{background:#fff;padding:0}
+    .mb-sheet{box-shadow:none;margin:0 auto;page-break-after:always;max-width:none}
+  }
 </style>
 </head>
 <body>
@@ -221,6 +267,9 @@
     <div class="view" id="view-appointments"></div>
     <div class="view" id="view-drehplan"></div>
     <div class="view" id="view-arbeitsplan"></div>
+    <div class="view" id="view-motivblaetter"></div>
+    <div class="view" id="view-motivblatt-edit"></div>
+    <div class="view" id="view-motivblatt-print"></div>
   </main>
 </div>
 <div id="modal-root"></div>
@@ -349,6 +398,7 @@ function debounce(fn,ms){let t;return (...a)=>{clearTimeout(t);t=setTimeout(()=>
 const DEFAULT_SETTINGS = {
   dbxAppKey:'', dbxRefreshToken:'', dbxAutoSync:true,
   dbxPath:'/september-zulieferer-daten.json', dbxPhotosFolder:'/fotos',
+  companyLogo:'', defaultProjectTitle:'September',
 };
 const SUPPLIER_CATEGORIES = ['Requisiten','Kostüm','Set-Bau / Möbel','Fahrzeuge','Technik','Verpflegung / Catering','Location','Personal / Statisten','Sonstiges'];
 const APPT_STATUS = [
@@ -376,10 +426,10 @@ const SEED_ARBEITSPLAN = [{"person": "Barbara", "date": "2026-08-18", "status": 
 const state = {
   view:'dashboard',
   calMonth:new Date(2026,8,1),
-  suppliers:[], appointments:[], photos:[], drehplan:[], arbeitsplan:[],
+  suppliers:[], appointments:[], photos:[], drehplan:[], arbeitsplan:[], motivblaetter:[],
   settings:{...DEFAULT_SETTINGS},
   loading:true,
-  activeSupplierId:null,
+  activeSupplierId:null, activeMotivblattId:null, printMotivblattId:null,
   supplierSearch:'', apptFilter:'upcoming', apptSearch:'', apSearch:'',
   settingsOpen:false, settingsTab:'sync', _dbxPending:false,
   dbx:{ accessToken:null, accessTokenExpires:0, syncStatus:'idle', lastSync:null, lastError:null, saveTimer:null, pkceVerifier:null },
@@ -392,6 +442,7 @@ async function loadAll(){
   try{const r=await appStorage.get('photos');if(r?.value)state.photos=JSON.parse(r.value);}catch(e){state.photos=[];}
   try{const r=await appStorage.get('drehplan');if(r?.value)state.drehplan=JSON.parse(r.value);}catch(e){state.drehplan=[];}
   try{const r=await appStorage.get('arbeitsplan');if(r?.value)state.arbeitsplan=JSON.parse(r.value);}catch(e){state.arbeitsplan=[];}
+  try{const r=await appStorage.get('motivblaetter');if(r?.value)state.motivblaetter=JSON.parse(r.value);}catch(e){state.motivblaetter=[];}
   // Erststart: Drehplan/Arbeitsplan mit extrahierten Daten befüllen, falls noch leer
   if(state.drehplan.length===0 && typeof SEED_DREHPLAN!=='undefined' && SEED_DREHPLAN.length){
     state.drehplan=SEED_DREHPLAN.map(d=>({id:uid(),...d}));
@@ -417,6 +468,7 @@ async function saveSuppliers(){try{await appStorage.set('suppliers',JSON.stringi
 async function saveAppointments(){try{await appStorage.set('appointments',JSON.stringify(state.appointments));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function savePhotos(){try{await appStorage.set('photos',JSON.stringify(state.photos));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function saveDrehplan(){try{await appStorage.set('drehplan',JSON.stringify(state.drehplan));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+async function saveMotivblaetter(){try{await appStorage.set('motivblaetter',JSON.stringify(state.motivblaetter));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function saveArbeitsplan(){try{await appStorage.set('arbeitsplan',JSON.stringify(state.arbeitsplan));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function saveSettings(){try{await appStorage.set('settings',JSON.stringify(state.settings));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 
@@ -520,7 +572,7 @@ function dbxBuildPayload(){
   return {
     format:'sep_zulieferer_sync_v1', savedAt:new Date().toISOString(),
     device:navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Mac')?'Mac':navigator.userAgent.includes('Android')?'Android':'Browser',
-    suppliers:state.suppliers, appointments:state.appointments, photos:state.photos, drehplan:state.drehplan, arbeitsplan:state.arbeitsplan,
+    suppliers:state.suppliers, appointments:state.appointments, photos:state.photos, drehplan:state.drehplan, arbeitsplan:state.arbeitsplan, motivblaetter:state.motivblaetter,
   };
 }
 async function dbxSaveToCloud(force=false){
@@ -556,7 +608,8 @@ async function dbxLoadFromCloud(){
     if(Array.isArray(data.photos)) state.photos=data.photos;
     if(Array.isArray(data.drehplan)) state.drehplan=data.drehplan;
     if(Array.isArray(data.arbeitsplan)) state.arbeitsplan=data.arbeitsplan;
-    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan();
+    if(Array.isArray(data.motivblaetter)) state.motivblaetter=data.motivblaetter;
+    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter();
     state.dbx.lastSync=new Date().toISOString(); state.dbx.syncStatus='idle'; updateSyncIndicator();
     return true;
   }catch(e){ state.dbx.syncStatus='error'; state.dbx.lastError=e.message; updateSyncIndicator(); return false; }
@@ -627,8 +680,8 @@ function base64ToBlob(dataURL){
   return new Blob([arr],{type:mime});
 }
 
-async function addPhotosToSupplier(files,supplierId,appointmentId){
-  let n=0;
+async function addPhotos(files,meta={}){
+  const added=[];
   for(const file of files){
     if(!file.type.startsWith('image/')) continue;
     try{
@@ -638,9 +691,13 @@ async function addPhotosToSupplier(files,supplierId,appointmentId){
       const id=uid();
       const ext='jpg';
       await appStorage.set('photoblob:'+id, await blobToBase64(fullBlob));
-      const photo={id,supplierId,appointmentId:appointmentId||null,caption:'',thumb:thumbDataURL,mime:'image/jpeg',uploadedAt:new Date().toISOString(),dropboxPath:null};
+      const photo={
+        id, caption:'', thumb:thumbDataURL, mime:'image/jpeg', uploadedAt:new Date().toISOString(), dropboxPath:null,
+        supplierId:meta.supplierId||null, appointmentId:meta.appointmentId||null,
+        motivblattId:meta.motivblattId||null, untermotivId:meta.untermotivId||null,
+      };
       state.photos.push(photo);
-      n++;
+      added.push(photo);
       if(dbxConnected()){
         const path=(state.settings.dbxPhotosFolder||'/fotos')+'/'+id+'.'+ext;
         dbxUploadBinary(path,fullBlob).then(()=>{ photo.dropboxPath=path; savePhotos(); updateSyncIndicator(); })
@@ -648,8 +705,11 @@ async function addPhotosToSupplier(files,supplierId,appointmentId){
       }
     }catch(e){ console.warn('Foto übersprungen',e); }
   }
-  if(n) await savePhotos();
-  return n;
+  if(added.length) await savePhotos();
+  return added;
+}
+async function addPhotosToSupplier(files,supplierId,appointmentId){
+  return (await addPhotos(files,{supplierId,appointmentId})).length;
 }
 async function deletePhoto(id){
   const p=state.photos.find(x=>x.id===id); if(!p) return;
@@ -775,10 +835,12 @@ const TABS = [
   {key:'appointments', label:'Termine', icon:'calendar'},
   {key:'drehplan', label:'Drehplan', icon:'list'},
   {key:'arbeitsplan', label:'Arbeitsplan', icon:'clock'},
+  {key:'motivblaetter', label:'Motivblätter', icon:'building'},
 ];
 function setView(key){
   state.view=key;
   if(key!=='supplier-detail') state.activeSupplierId=null;
+  if(key!=='motivblatt-edit'&&key!=='motivblatt-print') state.activeMotivblattId=null;
   render();
   window.scrollTo({top:0,behavior:'instant'});
 }
@@ -790,7 +852,7 @@ function render(){
   renderTabsBar();
   updateSyncIndicator();
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  const map={dashboard:'view-dashboard',suppliers:'view-suppliers','supplier-detail':'view-supplier-detail',appointments:'view-appointments',drehplan:'view-drehplan',arbeitsplan:'view-arbeitsplan'};
+  const map={dashboard:'view-dashboard',suppliers:'view-suppliers','supplier-detail':'view-supplier-detail',appointments:'view-appointments',drehplan:'view-drehplan',arbeitsplan:'view-arbeitsplan',motivblaetter:'view-motivblaetter','motivblatt-edit':'view-motivblatt-edit','motivblatt-print':'view-motivblatt-print'};
   const id=map[state.view]||'view-dashboard';
   document.getElementById(id).classList.add('active');
   if(state.view==='dashboard') renderDashboard();
@@ -799,6 +861,9 @@ function render(){
   else if(state.view==='appointments') renderAppointments();
   else if(state.view==='drehplan') renderDrehplan();
   else if(state.view==='arbeitsplan') renderArbeitsplan();
+  else if(state.view==='motivblaetter') renderMotivblaetter();
+  else if(state.view==='motivblatt-edit') renderMotivblattEdit();
+  else if(state.view==='motivblatt-print') renderMotivblattPrint();
 }
 function renderTabsBar(){
   const el=document.getElementById('tabs');
@@ -1207,6 +1272,264 @@ async function saveFreiRange(){
   closeModal(); toast(added+' Tag(e) eingetragen'+(skipped?' · '+skipped+' schon vorhanden':'')); render();
 }
 
+/* ---------------------------- Motivblätter ---------------------------- */
+function renderMotivblaetter(){
+  const el=document.getElementById('view-motivblaetter');
+  const list=state.motivblaetter.slice().sort((a,b)=>(a.motivName||'').localeCompare(b.motivName||'','de'));
+  el.innerHTML=`
+    <div class="row between" style="margin-bottom:14px">
+      <h2 style="font-size:19px">Motivblätter</h2>
+      <button class="btn btn-primary" data-action="new-motivblatt">${ic('plus')} Neues Motivblatt</button>
+    </div>
+    ${list.length?`<div class="mb-grid">${list.map(renderMotivblattCard).join('')}</div>`:`<div class="empty">${ic('building')}<div>Noch keine Motivblätter erfasst</div></div>`}
+  `;
+}
+function renderMotivblattCard(mb){
+  const untermotivCount=(mb.untermotive||[]).length;
+  const photoCount=state.photos.filter(p=>p.motivblattId===mb.id).length;
+  return `<div class="mb-card" data-action="edit-motivblatt" data-id="${mb.id}">
+    <div class="mbname">${escapeHtml(mb.motivName||'(ohne Namen)')}</div>
+    <div class="mbmeta">${escapeHtml((mb.address||'').split('\n')[0]||'')}</div>
+    <div class="mbmeta">${untermotivCount} Untermotiv${untermotivCount===1?'':'e'} · ${photoCount} Foto${photoCount===1?'':'s'}</div>
+    <div class="row" style="gap:6px;margin-top:6px">
+      <button class="btn btn-sm" data-action="print-motivblatt" data-id="${mb.id}">${ic('download')} Vorschau/Drucken</button>
+      <button class="iconbtn btn-sm btn-danger" data-action="del-motivblatt" data-id="${mb.id}" title="Löschen">${ic('trash')}</button>
+    </div>
+  </div>`;
+}
+function openMotivblattForm(id){
+  if(!id){
+    const mb={id:uid(),projectTitle:state.settings.defaultProjectTitle||'September',motivName:'',address:'',contacts:[],logoDataUrl:'',untermotive:[],createdAt:new Date().toISOString()};
+    state.motivblaetter.push(mb);
+    id=mb.id;
+    saveMotivblaetter();
+  }
+  state.activeMotivblattId=id;
+  state.view='motivblatt-edit';
+  render();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function renderMotivblattEdit(){
+  const el=document.getElementById('view-motivblatt-edit');
+  const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId);
+  if(!mb){ el.innerHTML=`<div class="empty">Motivblatt nicht gefunden</div>`; return; }
+  const contacts=mb.contacts||[];
+  const untermotive=mb.untermotive||[];
+  el.innerHTML=`
+    <div class="row between" style="margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" data-action="set-view" data-view="motivblaetter">${ic('back')} Zurück</button>
+      <div class="row" style="gap:6px">
+        <button class="btn btn-sm" data-action="print-motivblatt" data-id="${mb.id}">${ic('download')} Vorschau/Drucken</button>
+        <button class="iconbtn btn-danger" data-action="del-motivblatt" data-id="${mb.id}" title="Löschen">${ic('trash')}</button>
+      </div>
+    </div>
+    <div class="card pad stack" style="margin-bottom:16px">
+      <div class="field-row">
+        <div class="field"><label>Projekt-Titel</label><input id="mbf-project" value="${escapeAttr(mb.projectTitle||'')}"></div>
+        <div class="field"><label>Motiv *</label><input id="mbf-name" value="${escapeAttr(mb.motivName||'')}" placeholder="z.B. Supermarkt"></div>
+      </div>
+      <div class="field"><label>Adresse</label><textarea id="mbf-address" rows="2" placeholder="Firmenname&#10;Straße, PLZ Ort">${escapeHtml(mb.address||'')}</textarea></div>
+      <div class="divider">Ansprechpartner*innen</div>
+      <div id="mbf-contacts">${contacts.map((c,i)=>renderContactRow(c,i)).join('')}</div>
+      <button class="btn btn-sm" data-action="add-contact-row" style="align-self:flex-start">${ic('plus')} Ansprechpartner hinzufügen</button>
+      <div class="divider">Logo</div>
+      <div class="row" style="gap:10px;align-items:center">
+        ${(mb.logoDataUrl||state.settings.companyLogo)?`<img class="mb-logo-preview" style="width:140px" src="${mb.logoDataUrl||state.settings.companyLogo}">`:`<div class="hint">Noch kein Logo hinterlegt</div>`}
+        <button class="btn btn-sm" data-action="upload-logo">${ic('upload')} Logo ${(mb.logoDataUrl||state.settings.companyLogo)?'ändern':'hochladen'}</button>
+        <input type="file" id="mbf-logo-file" accept="image/*" style="display:none">
+      </div>
+    </div>
+    <div class="row between" style="margin:18px 0 10px"><h3 style="font-size:15px">Untermotive</h3>
+      <button class="btn btn-sm btn-primary" data-action="add-untermotiv">${ic('plus')} Untermotiv hinzufügen</button>
+    </div>
+    <div id="mbf-untermotive">${untermotive.map(u=>renderUntermotivCard(mb,u)).join('')}</div>
+    ${untermotive.length?'':`<div class="empty" style="padding:20px">Noch keine Untermotive – z.B. für einzelne Räume/Bereiche innerhalb des Motivs</div>`}
+  `;
+  bindMotivblattEditEvents(mb);
+}
+function renderContactRow(c,i){
+  return `<div class="mb-contact-row" data-idx="${i}">
+    <div class="field"><label>Rolle/Bezug (optional)</label><input data-cfield="role" value="${escapeAttr(c.role||'')}" placeholder="z.B. Balkon Miri"></div>
+    <div class="field"><label>Name</label><input data-cfield="name" value="${escapeAttr(c.name||'')}"></div>
+    <div class="field"><label>Telefon</label><input data-cfield="phone" value="${escapeAttr(c.phone||'')}"></div>
+    <div class="field"><label>E-Mail</label><input data-cfield="email" value="${escapeAttr(c.email||'')}"></div>
+    <button class="iconbtn btn-sm btn-danger" data-action="del-contact-row" data-idx="${i}" title="Entfernen">${ic('trash')}</button>
+  </div>`;
+}
+function renderUntermotivCard(mb,u){
+  const photos=state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id);
+  return `<div class="mb-untermotiv-card" data-uid="${u.id}">
+    <div class="row between" style="margin-bottom:8px;gap:8px">
+      <input data-ufield="title" value="${escapeAttr(u.title||'')}" placeholder="Untermotiv, z.B. Innenhof/Balkon" style="font-weight:600;font-size:14px;border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;flex:1;background:var(--bg-card)">
+      <button class="iconbtn btn-sm btn-danger" data-action="del-untermotiv" data-uid="${u.id}" title="Untermotiv löschen">${ic('trash')}</button>
+    </div>
+    <div class="field" style="margin-bottom:8px"><label>Referenz/Bildnummern (optional)</label><input data-ufield="ref" value="${escapeAttr(u.ref||'')}" placeholder="z.B. Bilder: 33, 34"></div>
+    <div class="drop-zone" style="margin-bottom:8px">
+      ${ic('camera')}<div style="margin-top:4px;font-size:12px">Fotos hierher ziehen oder klicken zum Hochladen</div>
+      <input type="file" class="mb-photo-file" accept="image/*" multiple style="display:none">
+    </div>
+    ${photos.length?`<div class="photo-grid" style="margin-bottom:8px">${photos.map(p=>`
+      <div class="photo-thumb" data-action="open-photo" data-id="${p.id}">
+        <img src="${p.thumb}" loading="lazy">
+        <button class="pdel" data-action="del-photo" data-id="${p.id}" title="Löschen">${ic('close')}</button>
+      </div>`).join('')}</div>
+      <div class="stack" style="margin-bottom:8px">${photos.map(p=>`<div class="row" style="gap:6px"><span style="font-size:11px;color:var(--ink-muted);min-width:64px">Bildtext:</span><input data-caption-id="${p.id}" value="${escapeAttr(p.caption||'')}" placeholder="kurze Beschreibung" style="flex:1;font-size:12px;padding:5px 8px"></div>`).join('')}</div>`:''}
+    <div class="field"><label>Anpassungen am Motiv / Notizen (eine Zeile = ein Punkt)</label><textarea data-ufield="notes" rows="4" placeholder="z.B.&#10;Kassen 1,2,3 werden bespielt&#10;EC-Gerät wird evtl. ausgetauscht">${escapeHtml(u.notes||'')}</textarea></div>
+  </div>`;
+}
+function bindMotivblattEditEvents(mb){
+  const proj=document.getElementById('mbf-project');
+  if(proj) proj.addEventListener('input',()=>{ mb.projectTitle=proj.value; debouncedSaveMotivblaetter(); });
+  const name=document.getElementById('mbf-name');
+  if(name) name.addEventListener('input',()=>{ mb.motivName=name.value; debouncedSaveMotivblaetter(); });
+  const addr=document.getElementById('mbf-address');
+  if(addr) addr.addEventListener('input',()=>{ mb.address=addr.value; debouncedSaveMotivblaetter(); });
+
+  document.querySelectorAll('#mbf-contacts .mb-contact-row').forEach(row=>{
+    const idx=+row.dataset.idx;
+    row.querySelectorAll('[data-cfield]').forEach(inp=>{
+      inp.addEventListener('input',()=>{ mb.contacts[idx][inp.dataset.cfield]=inp.value; debouncedSaveMotivblaetter(); });
+    });
+  });
+
+  const logoInput=document.getElementById('mbf-logo-file');
+  if(logoInput) logoInput.addEventListener('change',async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{
+      const blob=await compressImage(f,500,0.85);
+      const dataUrl=await blobToBase64(blob);
+      mb.logoDataUrl=dataUrl;
+      state.settings.companyLogo=dataUrl;
+      await saveMotivblaetter(); await saveSettings();
+      render();
+    }catch(err){ toast('Logo konnte nicht geladen werden'); }
+    logoInput.value='';
+  });
+
+  document.querySelectorAll('#mbf-untermotive .mb-untermotiv-card').forEach(card=>{
+    const uidVal=card.dataset.uid;
+    const u=(mb.untermotive||[]).find(x=>x.id===uidVal); if(!u) return;
+    card.querySelectorAll('[data-ufield]').forEach(inp=>{
+      inp.addEventListener('input',()=>{ u[inp.dataset.ufield]=inp.value; debouncedSaveMotivblaetter(); });
+    });
+    card.querySelectorAll('[data-caption-id]').forEach(inp=>{
+      inp.addEventListener('input',()=>{
+        const p=state.photos.find(x=>x.id===inp.dataset.captionId); if(!p) return;
+        p.caption=inp.value; debouncedSavePhotos();
+      });
+    });
+    const zone=card.querySelector('.drop-zone');
+    const fileInp=card.querySelector('.mb-photo-file');
+    if(zone&&fileInp){
+      zone.addEventListener('click',()=>fileInp.click());
+      fileInp.addEventListener('change',async e=>{
+        const files=Array.from(e.target.files);
+        if(files.length){ await addPhotos(files,{motivblattId:mb.id,untermotivId:uidVal}); toast(files.length+' Foto(s) hinzugefügt'); render(); }
+        fileInp.value='';
+      });
+      zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
+      zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+      zone.addEventListener('drop',async e=>{
+        e.preventDefault(); zone.classList.remove('drag');
+        const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
+        if(files.length){ await addPhotos(files,{motivblattId:mb.id,untermotivId:uidVal}); toast(files.length+' Foto(s) hinzugefügt'); render(); }
+      });
+    }
+  });
+}
+const debouncedSaveMotivblaetter=debounce(()=>saveMotivblaetter(),700);
+const debouncedSavePhotos=debounce(()=>savePhotos(),700);
+function addContactRow(){
+  const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId); if(!mb) return;
+  mb.contacts=mb.contacts||[]; mb.contacts.push({role:'',name:'',phone:'',email:''});
+  saveMotivblaetter(); render();
+}
+function delContactRow(idx){
+  const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId); if(!mb) return;
+  mb.contacts.splice(idx,1);
+  saveMotivblaetter(); render();
+}
+function addUntermotiv(){
+  const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId); if(!mb) return;
+  mb.untermotive=mb.untermotive||[]; mb.untermotive.push({id:uid(),title:'',ref:'',notes:''});
+  saveMotivblaetter(); render();
+}
+function deleteUntermotiv(uidVal){
+  if(!confirm('Dieses Untermotiv inkl. seiner Fotos löschen?')) return;
+  const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId); if(!mb) return;
+  const photoIds=state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===uidVal).map(p=>p.id);
+  mb.untermotive=mb.untermotive.filter(x=>x.id!==uidVal);
+  state.photos=state.photos.filter(p=>!(p.motivblattId===mb.id&&p.untermotivId===uidVal));
+  photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{}));
+  saveMotivblaetter(); savePhotos(); render();
+}
+function deleteMotivblatt(id){
+  if(!confirm('Dieses Motivblatt inkl. aller Fotos löschen?')) return;
+  const photoIds=state.photos.filter(p=>p.motivblattId===id).map(p=>p.id);
+  state.motivblaetter=state.motivblaetter.filter(x=>x.id!==id);
+  state.photos=state.photos.filter(p=>p.motivblattId!==id);
+  photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{}));
+  saveMotivblaetter(); savePhotos();
+  state.view='motivblaetter'; state.activeMotivblattId=null;
+  toast('Motivblatt gelöscht'); render();
+}
+
+async function openMotivblattPrint(id){
+  state.printMotivblattId=id;
+  state.view='motivblatt-print';
+  render();
+  await upgradeMotivblattPrintPhotos();
+}
+async function upgradeMotivblattPrintPhotos(){
+  const imgs=document.querySelectorAll('#view-motivblatt-print img[data-photo-id]');
+  for(const img of imgs){
+    const p=state.photos.find(x=>x.id===img.dataset.photoId);
+    if(!p) continue;
+    try{ img.src=await getPhotoFullSrc(p); }catch(e){}
+  }
+}
+function renderMotivblattPrint(){
+  const el=document.getElementById('view-motivblatt-print');
+  const mb=state.motivblaetter.find(x=>x.id===state.printMotivblattId);
+  if(!mb){ el.innerHTML=`<div class="empty">Motivblatt nicht gefunden</div>`; return; }
+  const untermotive=(mb.untermotive&&mb.untermotive.length)?mb.untermotive:[{id:'_leer',title:'',ref:'',notes:''}];
+  el.innerHTML=`
+    <div class="mb-print-wrap">
+      <div class="mb-sheet-toolbar no-print">
+        <button class="btn btn-sm" data-action="set-view" data-view="motivblatt-edit">${ic('back')} Zurück zum Bearbeiten</button>
+        <button class="btn btn-primary btn-sm" data-action="do-print">${ic('download')} Als PDF drucken/speichern</button>
+      </div>
+      ${untermotive.map(u=>renderMotivblattSheetHTML(mb,u)).join('')}
+    </div>
+  `;
+}
+function renderMotivblattSheetHTML(mb,u){
+  const contacts=mb.contacts||[];
+  const addressLines=(mb.address||'').split('\n').filter(Boolean);
+  const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id);
+  const notesLines=(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const logo=mb.logoDataUrl||state.settings.companyLogo;
+  return `<div class="mb-sheet">
+    <div class="diamond-banner"></div>
+    <div class="mb-title">${escapeHtml(mb.projectTitle||'September')}</div>
+    <div class="diamond-banner"></div>
+    <div class="mb-motiv-box"><h2>Motiv: ${escapeHtml(mb.motivName||'')}</h2></div>
+    <div class="mb-info-row">
+      <div class="mb-address-box">
+        ${addressLines.length?`<div class="mb-label">Adresse:</div>${addressLines.map((l,i)=>`<div${i===0?' class="mb-bold"':''}>${escapeHtml(l)}</div>`).join('')}`:''}
+        ${contacts.length?`<div class="mb-label" style="margin-top:${addressLines.length?'10px':'0'}">${contacts.length>1?'Ansprechpartner*innen:':'Ansprechpartner*in:'}</div>
+          ${contacts.map(c=>`<div style="margin-top:6px">${c.role?`<div class="mb-bold">${escapeHtml(c.role)}:</div>`:''}<span class="mb-bold">${escapeHtml(c.name||'')}</span>${c.phone?': '+escapeHtml(c.phone):''}${c.email?`<br>${escapeHtml(c.email)}`:''}</div>`).join('')}`:''}
+      </div>
+      <div class="mb-logo-box">${logo?`<img src="${logo}">`:''}</div>
+    </div>
+    ${(u.title||u.ref||photos.length||notesLines.length)?`<div class="mb-untermotiv-box">
+      <div class="mb-untermotiv-head"><h3>${escapeHtml(u.title||'')}</h3>${u.ref?`<div class="mb-ref">${escapeHtml(u.ref)}</div>`:''}</div>
+      ${photos.length?`<div class="mb-photo-row">${photos.map(p=>`<div class="mb-photo"><img data-photo-id="${p.id}" src="${p.thumb}">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}</div>`).join('')}</div>`:''}
+      ${notesLines.length?`<ul class="mb-notes">${notesLines.map(l=>`<li>${escapeHtml(l.replace(/^[-•]\s*/,''))}</li>`).join('')}</ul>`:''}
+    </div>`:''}
+  </div>`;
+}
+
 /* ---------------------------- Modals ---------------------------- */
 function openModal(html){
   document.getElementById('modal-root').innerHTML=`<div class="modal-bg" data-action="modal-bg-close"><div class="modal" data-action="noop">${html}</div></div>`;
@@ -1518,7 +1841,7 @@ async function importArbeitsplanFile(file){
 
 /* ---------------------------- Backup Export/Import ---------------------------- */
 function exportBackup(){
-  const payload={format:'sep_zulieferer_backup_v1',savedAt:new Date().toISOString(),suppliers:state.suppliers,appointments:state.appointments,photos:state.photos,drehplan:state.drehplan,arbeitsplan:state.arbeitsplan};
+  const payload={format:'sep_zulieferer_backup_v1',savedAt:new Date().toISOString(),suppliers:state.suppliers,appointments:state.appointments,photos:state.photos,drehplan:state.drehplan,arbeitsplan:state.arbeitsplan,motivblaetter:state.motivblaetter};
   downloadFile('september-zulieferer-backup-'+todayISO()+'.json',JSON.stringify(payload,null,2),'application/json');
 }
 async function importBackupFile(file){
@@ -1530,7 +1853,8 @@ async function importBackupFile(file){
     if(Array.isArray(data.photos)) state.photos=data.photos;
     if(Array.isArray(data.drehplan)) state.drehplan=data.drehplan;
     if(Array.isArray(data.arbeitsplan)) state.arbeitsplan=data.arbeitsplan;
-    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan();
+    if(Array.isArray(data.motivblaetter)) state.motivblaetter=data.motivblaetter;
+    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter();
     toast('Sicherung geladen'); closeModal(); render();
   }catch(e){ toast('Fehler beim Laden: '+e.message); }
 }
@@ -1577,6 +1901,16 @@ document.addEventListener('click', async (e)=>{
     case 'import-ap-json': document.getElementById('ap-import-file')?.click(); break;
     case 'open-frei-range': openFreiRangeForm(); break;
     case 'save-frei-range': await saveFreiRange(); break;
+    case 'new-motivblatt': openMotivblattForm(null); break;
+    case 'edit-motivblatt': openMotivblattForm(t.dataset.id); break;
+    case 'del-motivblatt': deleteMotivblatt(t.dataset.id); break;
+    case 'print-motivblatt': await openMotivblattPrint(t.dataset.id); break;
+    case 'add-contact-row': addContactRow(); break;
+    case 'del-contact-row': delContactRow(+t.dataset.idx); break;
+    case 'add-untermotiv': addUntermotiv(); break;
+    case 'del-untermotiv': deleteUntermotiv(t.dataset.uid); break;
+    case 'upload-logo': document.getElementById('mbf-logo-file')?.click(); break;
+    case 'do-print': window.print(); break;
     case 'open-settings': openSettings(); break;
     case 'settings-tab': state.settingsTab=t.dataset.tab; renderSettingsModal(); break;
     case 'dbx-start-auth': {
