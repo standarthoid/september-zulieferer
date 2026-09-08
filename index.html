@@ -240,11 +240,12 @@
   .mb-notes li{margin-bottom:4px}
   .mb-sheet-toolbar{max-width:210mm;margin:0 auto 12px;display:flex;justify-content:space-between;gap:8px}
 
+  @page{size:A4;margin:0}
   @media print{
     header.topbar, .no-print{display:none!important}
     main{padding:0!important;max-width:none!important}
     .mb-print-wrap{background:#fff;padding:0}
-    .mb-sheet{box-shadow:none;margin:0 auto;page-break-after:always;max-width:none}
+    .mb-sheet{box-shadow:none;margin:0 auto;page-break-after:always;break-after:page;max-width:none;width:210mm;min-height:297mm}
   }
 </style>
 </head>
@@ -1614,18 +1615,34 @@ async function upgradeMotivblattPrintPhotos(){
     try{ img.src=await getPhotoFullSrc(p); }catch(e){}
   }
 }
+const MB_PHOTOS_PER_PAGE = 9; // 3×3-Raster — Fotos werden nie verkleinert, bei mehr Fotos gibt's stattdessen eine Fortsetzungsseite
 function renderMotivblattPrint(){
   const el=document.getElementById('view-motivblatt-print');
   const mb=state.motivblaetter.find(x=>x.id===state.printMotivblattId);
   if(!mb){ el.innerHTML=`<div class="empty">Motivblatt nicht gefunden</div>`; return; }
   const untermotive=(mb.untermotive&&mb.untermotive.length)?mb.untermotive:[{id:'_leer',title:'',ref:'',notes:''}];
+  const sheets=[];
+  untermotive.forEach(u=>{
+    const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id);
+    if(photos.length<=MB_PHOTOS_PER_PAGE){
+      sheets.push(renderMotivblattSheetHTML(mb,u,photos));
+    }else{
+      const chunks=[];
+      for(let i=0;i<photos.length;i+=MB_PHOTOS_PER_PAGE) chunks.push(photos.slice(i,i+MB_PHOTOS_PER_PAGE));
+      chunks.forEach((chunk,idx)=>{
+        const uPart={...u, title:(u.title||'')+` (Fortsetzung ${idx+1}/${chunks.length})`, notes:idx===0?u.notes:''};
+        sheets.push(renderMotivblattSheetHTML(mb,uPart,chunk));
+      });
+    }
+  });
   el.innerHTML=`
     <div class="mb-print-wrap">
       <div class="mb-sheet-toolbar no-print">
         <button class="btn btn-sm" data-action="set-view" data-view="motivblatt-edit">${ic('back')} Zurück zum Bearbeiten</button>
         <button class="btn btn-primary btn-sm" data-action="do-print">${ic('download')} Als PDF drucken/speichern</button>
       </div>
-      ${untermotive.map(u=>renderMotivblattSheetHTML(mb,u)).join('')}
+      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Jede Seite ist fix im DIN-A4-Format. Fotos werden nie verkleinert, um mehr auf eine Seite zu quetschen — bei mehr als ${MB_PHOTOS_PER_PAGE} Fotos pro Untermotiv wird automatisch eine Fortsetzungsseite angelegt. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" wählen (nicht „An Seite anpassen"), damit das erhalten bleibt.</div>
+      ${sheets.join('')}
     </div>
   `;
 }
@@ -1658,10 +1675,10 @@ function motivblattStyleAttr(){
   const boxBg=`rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`;
   return `font-family:${font.css};color:${textColor};--mb-scale:${scale};--mb-weight:${weight};--mb-italic:${italic};--mb-underline:${underline};--mb-textcolor:${textColor};--mb-boxbg:${boxBg}`;
 }
-function renderMotivblattSheetHTML(mb,u){
+function renderMotivblattSheetHTML(mb,u,photosOverride){
   const contacts=mb.contacts||[];
   const addressLines=(mb.address||'').split('\n').filter(Boolean);
-  const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id);
+  const photos=photosOverride||(u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id));
   const notesLines=(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
   const logo=mb.logoDataUrl||state.settings.companyLogo;
   const patternStyle=state.settings.headerPattern?` style="background-image:url('${escapeAttr(state.settings.headerPattern)}')"`:'';
