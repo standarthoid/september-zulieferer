@@ -1341,14 +1341,14 @@ function openApptForm(id,defaults={}){
   openModal(`
     <div class="modal-head"><h3>${existing?'Termin bearbeiten':'Neuer Termin'}</h3><button class="iconbtn" data-action="close-modal">${ic('close')}</button></div>
     <div class="modal-body stack">
-      <div class="field"><label>Zulieferer *</label><select id="f-supplier"><option value="">– auswählen –</option>${supplierOptions}</select></div>
+      <div class="field"><label>Zulieferer</label><select id="f-supplier"><option value="">– kein Zulieferer –</option>${supplierOptions}</select></div>
       <div class="field"><label>Titel *</label><input id="f-title" value="${escapeAttr(a.title)}" placeholder="z.B. Anlieferung Requisiten"></div>
       <div class="field-row3">
         <div class="field"><label>Datum *</label><input id="f-date" type="date" value="${escapeAttr(a.date)}"></div>
         <div class="field"><label>Von</label><input id="f-start" type="time" value="${escapeAttr(a.startTime||'')}"></div>
         <div class="field"><label>Bis</label><input id="f-end" type="time" value="${escapeAttr(a.endTime||'')}"></div>
       </div>
-      <div class="field"><label>Ort (falls abweichend von Zulieferer-Adresse)</label><input id="f-loc" value="${escapeAttr(a.location||'')}"></div>
+      <div class="field"><label>Ort</label><input id="f-loc" value="${escapeAttr(a.location||'')}" placeholder="Adresse, falls kein/abweichender Zulieferer"></div>
       <div class="field"><label>Status</label><select id="f-status">${APPT_STATUS.map(st=>`<option value="${st.v}" ${a.status===st.v?'selected':''}>${st.l}</option>`).join('')}</select></div>
       <div class="field"><label>Notizen / was ist ausgemacht</label><textarea id="f-notes" rows="3">${escapeHtml(a.notes||'')}</textarea></div>
     </div>
@@ -1359,10 +1359,9 @@ function openApptForm(id,defaults={}){
   `);
 }
 async function saveApptForm(id){
-  const supplierId=document.getElementById('f-supplier').value;
+  const supplierId=document.getElementById('f-supplier').value||null;
   const title=document.getElementById('f-title').value.trim();
   const date=document.getElementById('f-date').value;
-  if(!supplierId){toast('Bitte Zulieferer auswählen');return;}
   if(!title){toast('Bitte Titel eingeben');return;}
   if(!date){toast('Bitte Datum eingeben');return;}
   const data={
