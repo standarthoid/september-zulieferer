@@ -1107,6 +1107,7 @@ function renderArbeitsplan(){
         <button class="btn btn-sm" data-action="export-ap-json">${ic('download')} Als JSON sichern</button>
         <button class="btn btn-sm" data-action="import-ap-json">${ic('upload')} Neuen Arbeitsplan importieren</button>
         <input type="file" id="ap-import-file" accept="application/json" style="display:none">
+        <button class="btn btn-sm" data-action="open-frei-range">🌸 Freien Zeitraum eintragen</button>
         <button class="btn btn-primary btn-sm" data-action="add-ap-row">${ic('plus')} Zeile hinzufügen</button>
       </div>
     </div>
@@ -1163,6 +1164,43 @@ function addArbeitsplanRow(dateOverride){
 function deleteArbeitsplanRow(id){
   if(!confirm('Diese Arbeitsplan-Zeile löschen?')) return;
   state.arbeitsplan=state.arbeitsplan.filter(x=>x.id!==id); saveArbeitsplan(); render();
+}
+function openFreiRangeForm(){
+  openModal(`
+    <div class="modal-head"><h3>Freien Zeitraum eintragen</h3><button class="iconbtn" data-action="close-modal">${ic('close')}</button></div>
+    <div class="modal-body stack">
+      <div class="field"><label>Person / Rolle *</label><input id="fr-person" placeholder="z.B. Lilly"></div>
+      <div class="field-row">
+        <div class="field"><label>Von *</label><input id="fr-start" type="date"></div>
+        <div class="field"><label>Bis *</label><input id="fr-end" type="date"></div>
+      </div>
+      <div class="field"><label>Status</label><input id="fr-status" value="Frei"></div>
+      <div class="hint">Legt für jeden Tag im Zeitraum (inkl. Wochenende) einen Arbeitsplan-Eintrag als „frei" an. Für diese Person schon vorhandene Tage werden nicht doppelt angelegt.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn grow" data-action="close-modal">Abbrechen</button>
+      <button class="btn btn-primary grow" data-action="save-frei-range">Eintragen</button>
+    </div>
+  `);
+}
+async function saveFreiRange(){
+  const person=document.getElementById('fr-person').value.trim();
+  const start=document.getElementById('fr-start').value;
+  const end=document.getElementById('fr-end').value;
+  const status=document.getElementById('fr-status').value.trim()||'Frei';
+  if(!person){toast('Bitte Person/Rolle eingeben');return;}
+  if(!start||!end){toast('Bitte Zeitraum eingeben');return;}
+  if(end<start){toast('„Bis" liegt vor „Von"');return;}
+  const existing=new Set(state.arbeitsplan.filter(x=>x.person===person).map(x=>x.date));
+  let d=isoToDate(start); const endD=isoToDate(end); let added=0, skipped=0;
+  while(d<=endD){
+    const iso=dateToISO(d);
+    if(existing.has(iso)){ skipped++; }
+    else{ state.arbeitsplan.push({id:uid(),person,date:iso,status,note:'',dayOff:true}); added++; }
+    d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);
+  }
+  await saveArbeitsplan();
+  closeModal(); toast(added+' Tag(e) eingetragen'+(skipped?' · '+skipped+' schon vorhanden':'')); render();
 }
 
 /* ---------------------------- Modals ---------------------------- */
@@ -1533,6 +1571,8 @@ document.addEventListener('click', async (e)=>{
     case 'del-ap-row': deleteArbeitsplanRow(t.dataset.id); break;
     case 'export-ap-json': exportArbeitsplanJSON(); break;
     case 'import-ap-json': document.getElementById('ap-import-file')?.click(); break;
+    case 'open-frei-range': openFreiRangeForm(); break;
+    case 'save-frei-range': await saveFreiRange(); break;
     case 'open-settings': openSettings(); break;
     case 'settings-tab': state.settingsTab=t.dataset.tab; renderSettingsModal(); break;
     case 'dbx-start-auth': {
