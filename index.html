@@ -1102,6 +1102,16 @@ function renderSettingsModal(){
 function renderTabSync(){
   const s=state.settings; const connected=dbxConnected();
   const last=state.dbx.lastSync; const lastTxt=last?new Date(last).toLocaleString('de-DE'):'noch nie';
+  const pathFields=`
+    <div class="field-row">
+      <div class="field"><label>Dateipfad in Dropbox</label>
+        <input type="text" id="s-dbxpath" value="${escapeAttr(s.dbxPath||'/september-zulieferer-daten.json')}" placeholder="/september-zulieferer-daten.json">
+      </div>
+      <div class="field"><label>Fotos-Ordner in Dropbox</label>
+        <input type="text" id="s-dbxphotos" value="${escapeAttr(s.dbxPhotosFolder||'/fotos')}" placeholder="/fotos">
+      </div>
+    </div>
+    <div class="hint" style="margin:-6px 0 4px">Bei <b>„App folder"</b>-Zugriff (Standard) sind diese Pfade automatisch relativ zum eigenen App-Ordner (Apps/&lt;App-Name&gt;) — hier lässt sich nur der Dateiname/Unterordner darin ändern. Bei <b>„Full Dropbox"</b>-Zugriff sind es echte Pfade ab deinem Dropbox-Stammverzeichnis, z.B. <code>/September/september-zulieferer-daten.json</code>, um einen bereits bestehenden Ordner zu nutzen.</div>`;
   return `<div class="stack">
     <div class="info-box"><b>Dropbox-Sync</b> hält Zulieferer, Termine, Fotos und Drehplan auf allen deinen Geräten synchron. Änderungen werden automatisch in deine Dropbox gespeichert.</div>
     ${connected?`
@@ -1111,6 +1121,7 @@ function renderTabSync(){
         Datei: <code>${escapeHtml(s.dbxPath)}</code> · Fotos-Ordner: <code>${escapeHtml(s.dbxPhotosFolder)}</code>
         ${state.dbx.lastError?`<br><span style="color:var(--terra)">Fehler: ${escapeHtml(state.dbx.lastError)}</span>`:''}
       </div>
+      ${pathFields}
       <label class="toggle">
         <input type="checkbox" id="s-dbxauto" ${s.dbxAutoSync?'checked':''}>
         <span class="switch"></span>
@@ -1124,13 +1135,17 @@ function renderTabSync(){
         <b>Einmalige Einrichtung (5 Minuten):</b><br>
         1. Öffne <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener" style="color:var(--green);font-weight:600">dropbox.com/developers/apps</a><br>
         2. Klick <b>„Create app"</b><br>
-        3. Wähle <b>„Scoped access"</b> → <b>„App folder"</b> (nur ein eigener Ordner, nicht deine ganze Dropbox)<br>
+        3. Wähle <b>„Scoped access"</b>, dann bei „Type of access":<br>
+        &nbsp;&nbsp;• <b>„App folder"</b> — einfachster Weg, Dropbox legt automatisch einen eigenen Ordner an (Apps/&lt;App-Name&gt;), kein Zugriff auf den Rest deiner Dropbox.<br>
+        &nbsp;&nbsp;• <b>„Full Dropbox"</b> — falls die Daten in einen <u>bereits bestehenden</u> Ordner sollen (z.B. euren Produktionsordner). Gewährt Zugriff auf deine gesamte Dropbox, trag dann unten den echten Pfad zu diesem Ordner ein.<br>
         4. Name z.B. „September Zulieferer"<br>
-        5. Tab <b>„Permissions"</b>: Häkchen bei <code>files.content.write</code> und <code>files.content.read</code> → speichern<br>
+        5. Tab <b>„Permissions"</b>: Häkchen bei <code>files.content.write</code> und <code>files.content.read</code> → unten <b>Submit</b> klicken (nicht vergessen!)<br>
         6. Tab <b>„Settings"</b>: <b>„App key"</b> kopieren und unten einfügen<br>
-        7. Unten auf <b>„Verbinden"</b> klicken → Dropbox-Fenster öffnet sich → bestätigen → Code zurückkopieren
+        7. Bei Bedarf Dateipfad/Fotos-Ordner unten anpassen<br>
+        8. Unten auf <b>„Verbinden"</b> klicken → Dropbox-Fenster öffnet sich → bestätigen → Code zurückkopieren
       </div>
       <div class="field"><label>App Key</label><input type="text" id="s-dbxkey" value="${escapeAttr(s.dbxAppKey)}" placeholder="z.B. abc1234def5678" autocomplete="off"></div>
+      ${pathFields}
       <button class="btn btn-primary btn-block" data-action="dbx-start-auth">Mit Dropbox verbinden</button>
       <div id="dbx-code-box" style="${state._dbxPending?'':'display:none'}">
         <div class="field" style="margin-top:10px"><label>Autorisierungs-Code aus Dropbox</label>
@@ -1155,6 +1170,11 @@ function renderTabData(){
 function bindSettingsEvents(){
   const key=document.getElementById('s-dbxkey');
   if(key) key.addEventListener('change',()=>{ state.settings.dbxAppKey=key.value.trim(); saveSettings(); });
+  const normPath=(v,fallback)=>{ v=(v||'').trim(); if(!v) return fallback; if(!v.startsWith('/')) v='/'+v; return v; };
+  const pathInp=document.getElementById('s-dbxpath');
+  if(pathInp) pathInp.addEventListener('change',()=>{ state.settings.dbxPath=normPath(pathInp.value,'/september-zulieferer-daten.json'); pathInp.value=state.settings.dbxPath; saveSettings(); });
+  const photosInp=document.getElementById('s-dbxphotos');
+  if(photosInp) photosInp.addEventListener('change',()=>{ state.settings.dbxPhotosFolder=normPath(photosInp.value,'/fotos').replace(/\/$/,''); photosInp.value=state.settings.dbxPhotosFolder; saveSettings(); });
   const auto=document.getElementById('s-dbxauto');
   if(auto) auto.addEventListener('change',()=>{ state.settings.dbxAutoSync=auto.checked; saveSettings(); });
   const fileInp=document.getElementById('backup-file');
@@ -1401,6 +1421,8 @@ document.addEventListener('click', async (e)=>{
     case 'settings-tab': state.settingsTab=t.dataset.tab; renderSettingsModal(); break;
     case 'dbx-start-auth': {
       const key=document.getElementById('s-dbxkey'); if(key) state.settings.dbxAppKey=key.value.trim();
+      const p=document.getElementById('s-dbxpath'); if(p&&p.value.trim()) state.settings.dbxPath=p.value.trim().startsWith('/')?p.value.trim():'/'+p.value.trim();
+      const pf=document.getElementById('s-dbxphotos'); if(pf&&pf.value.trim()) state.settings.dbxPhotosFolder=(pf.value.trim().startsWith('/')?pf.value.trim():'/'+pf.value.trim()).replace(/\/$/,'');
       await saveSettings(); await dbxStartAuth(); break;
     }
     case 'dbx-finish-auth': {
