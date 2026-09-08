@@ -209,8 +209,7 @@
   .mb-card .mbname{font-family:Georgia,serif;font-size:16px}
   .mb-card .mbmeta{font-size:12px;color:var(--ink-muted)}
   .mb-untermotiv-card{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg-card);margin-bottom:10px}
-  .mb-contact-row{display:grid;grid-template-columns:.8fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px}
-  @media(max-width:720px){.mb-contact-row{grid-template-columns:1fr 1fr}}
+  .mb-contact-card{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;background:var(--bg-sunk)}
   .mb-logo-preview{width:100%;max-height:90px;object-fit:contain;background:var(--bg-sunk);border-radius:8px;padding:8px}
 
   /* Druck-/Vorschau-Blatt: bewusst eigenes Farbschema, das die Vorlage nachbildet */
@@ -1328,7 +1327,7 @@ function renderMotivblattEdit(){
         <div class="field"><label>Projekt-Titel</label><input id="mbf-project" value="${escapeAttr(mb.projectTitle||'')}"></div>
         <div class="field"><label>Motiv *</label><input id="mbf-name" value="${escapeAttr(mb.motivName||'')}" placeholder="z.B. Supermarkt"></div>
       </div>
-      <div class="field"><label>Adresse</label><textarea id="mbf-address" rows="2" placeholder="Firmenname&#10;Straße, PLZ Ort">${escapeHtml(mb.address||'')}</textarea></div>
+      <div class="field"><label>Motiv-Adresse</label><textarea id="mbf-address" rows="2" placeholder="Firmenname&#10;Straße, PLZ Ort">${escapeHtml(mb.address||'')}</textarea></div>
       <div class="divider">Ansprechpartner*innen</div>
       <div id="mbf-contacts">${contacts.map((c,i)=>renderContactRow(c,i)).join('')}</div>
       <button class="btn btn-sm" data-action="add-contact-row" style="align-self:flex-start">${ic('plus')} Ansprechpartner hinzufügen</button>
@@ -1348,12 +1347,20 @@ function renderMotivblattEdit(){
   bindMotivblattEditEvents(mb);
 }
 function renderContactRow(c,i){
-  return `<div class="mb-contact-row" data-idx="${i}">
-    <div class="field"><label>Rolle/Bezug (optional)</label><input data-cfield="role" value="${escapeAttr(c.role||'')}" placeholder="z.B. Balkon Miri"></div>
-    <div class="field"><label>Name</label><input data-cfield="name" value="${escapeAttr(c.name||'')}"></div>
-    <div class="field"><label>Telefon</label><input data-cfield="phone" value="${escapeAttr(c.phone||'')}"></div>
-    <div class="field"><label>E-Mail</label><input data-cfield="email" value="${escapeAttr(c.email||'')}"></div>
-    <button class="iconbtn btn-sm btn-danger" data-action="del-contact-row" data-idx="${i}" title="Entfernen">${ic('trash')}</button>
+  return `<div class="mb-contact-card" data-idx="${i}">
+    <div class="row between" style="margin-bottom:6px">
+      <span style="font-size:11px;color:var(--ink-muted);font-weight:600">Ansprechpartner*in ${i+1}</span>
+      <button class="iconbtn btn-sm btn-danger" data-action="del-contact-row" data-idx="${i}" title="Entfernen">${ic('trash')}</button>
+    </div>
+    <div class="field-row3" style="margin-bottom:8px">
+      <div class="field"><label>Rolle/Bezug (optional)</label><input data-cfield="role" value="${escapeAttr(c.role||'')}" placeholder="z.B. Balkon Miri"></div>
+      <div class="field"><label>Name</label><input data-cfield="name" value="${escapeAttr(c.name||'')}"></div>
+      <div class="field"><label>Telefon</label><input data-cfield="phone" value="${escapeAttr(c.phone||'')}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>E-Mail</label><input data-cfield="email" value="${escapeAttr(c.email||'')}"></div>
+      <div class="field"><label>Adresse (falls abweichend von Motiv-Adresse)</label><input data-cfield="address" value="${escapeAttr(c.address||'')}" placeholder="nur ausfüllen, falls abweichend"></div>
+    </div>
   </div>`;
 }
 function renderUntermotivCard(mb,u){
@@ -1385,7 +1392,7 @@ function bindMotivblattEditEvents(mb){
   const addr=document.getElementById('mbf-address');
   if(addr) addr.addEventListener('input',()=>{ mb.address=addr.value; debouncedSaveMotivblaetter(); });
 
-  document.querySelectorAll('#mbf-contacts .mb-contact-row').forEach(row=>{
+  document.querySelectorAll('#mbf-contacts .mb-contact-card').forEach(row=>{
     const idx=+row.dataset.idx;
     row.querySelectorAll('[data-cfield]').forEach(inp=>{
       inp.addEventListener('input',()=>{ mb.contacts[idx][inp.dataset.cfield]=inp.value; debouncedSaveMotivblaetter(); });
@@ -1441,7 +1448,7 @@ const debouncedSaveMotivblaetter=debounce(()=>saveMotivblaetter(),700);
 const debouncedSavePhotos=debounce(()=>savePhotos(),700);
 function addContactRow(){
   const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId); if(!mb) return;
-  mb.contacts=mb.contacts||[]; mb.contacts.push({role:'',name:'',phone:'',email:''});
+  mb.contacts=mb.contacts||[]; mb.contacts.push({role:'',name:'',phone:'',email:'',address:''});
   saveMotivblaetter(); render();
 }
 function delContactRow(idx){
@@ -1516,9 +1523,9 @@ function renderMotivblattSheetHTML(mb,u){
     <div class="mb-motiv-box"><h2>Motiv: ${escapeHtml(mb.motivName||'')}</h2></div>
     <div class="mb-info-row">
       <div class="mb-address-box">
-        ${addressLines.length?`<div class="mb-label">Adresse:</div>${addressLines.map((l,i)=>`<div${i===0?' class="mb-bold"':''}>${escapeHtml(l)}</div>`).join('')}`:''}
+        ${addressLines.length?`<div class="mb-label">Motiv-Adresse:</div>${addressLines.map((l,i)=>`<div${i===0?' class="mb-bold"':''}>${escapeHtml(l)}</div>`).join('')}`:''}
         ${contacts.length?`<div class="mb-label" style="margin-top:${addressLines.length?'10px':'0'}">${contacts.length>1?'Ansprechpartner*innen:':'Ansprechpartner*in:'}</div>
-          ${contacts.map(c=>`<div style="margin-top:6px">${c.role?`<div class="mb-bold">${escapeHtml(c.role)}:</div>`:''}<span class="mb-bold">${escapeHtml(c.name||'')}</span>${c.phone?': '+escapeHtml(c.phone):''}${c.email?`<br>${escapeHtml(c.email)}`:''}</div>`).join('')}`:''}
+          ${contacts.map(c=>`<div style="margin-top:6px">${c.role?`<div class="mb-bold">${escapeHtml(c.role)}:</div>`:''}<span class="mb-bold">${escapeHtml(c.name||'')}</span>${c.phone?': '+escapeHtml(c.phone):''}${c.email?`<br>${escapeHtml(c.email)}`:''}${c.address?`<br>${escapeHtml(c.address)}`:''}</div>`).join('')}`:''}
       </div>
       <div class="mb-logo-box">${logo?`<img src="${logo}">`:''}</div>
     </div>
