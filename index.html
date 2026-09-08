@@ -439,9 +439,14 @@ async function dbxStartAuth(){
     const url=`${DBX_AUTH_URL}?client_id=${encodeURIComponent(appKey)}`
       +`&response_type=code&code_challenge=${challenge}&code_challenge_method=S256`
       +`&token_access_type=offline`;
+    // Code-Eingabefeld sofort einblenden — die Dropbox-Seite öffnet sich in einem
+    // neuen Tab, der ursprüngliche Tab lädt dabei NICHT neu, daher darf das Feld
+    // nicht erst auf einen Reload warten.
+    state._dbxPending=true;
+    if(state.settingsOpen) renderSettingsModal();
     if(win && !win.closed){
       win.location.href=url;
-      toast('Dropbox in neuem Tab geöffnet. Danach Code hier einfügen.');
+      toast('Dropbox in neuem Tab geöffnet. Code dort kopieren und unten einfügen.');
     } else {
       toast('Pop-ups blockiert – öffne Dropbox im gleichen Tab…');
       setTimeout(()=>{window.location.href=url;},900);
