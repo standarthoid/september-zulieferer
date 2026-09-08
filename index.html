@@ -1014,12 +1014,15 @@ function renderDrehplan(){
   el.innerHTML=`
     <div class="row between" style="margin-bottom:14px;flex-wrap:wrap;gap:10px">
       <h2 style="font-size:19px">Drehplan</h2>
-      <div class="row" style="gap:8px">
+      <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-sm" data-action="ics-drehplan">${ic('download')} Als Kalender exportieren</button>
+        <button class="btn btn-sm" data-action="export-dp-json">${ic('download')} Als JSON sichern</button>
+        <button class="btn btn-sm" data-action="import-dp-json">${ic('upload')} Neuen Drehplan importieren</button>
+        <input type="file" id="dp-import-file" accept="application/json" style="display:none">
         <button class="btn btn-primary btn-sm" data-action="add-dp-row">${ic('plus')} Zeile hinzufügen</button>
       </div>
     </div>
-    <div class="info-box" style="margin-bottom:12px">Aus dem Drehplan-PDF (Stand 04.09.2026) importiert. Änderungen am echten Drehplan hier nachtragen — die Kalender-Übersicht auf „Übersicht" aktualisiert sich automatisch.</div>
+    <div class="info-box" style="margin-bottom:12px">Aus dem Drehplan-PDF (Stand 04.09.2026) importiert. Änderungen am echten Drehplan hier nachtragen — die Kalender-Übersicht auf „Übersicht" aktualisiert sich automatisch.<br>Ändert sich der echte Drehplan später (neue PDF-Fassung), lass dir daraus eine JSON-Datei im gleichen Format erstellen und importiere sie über „Neuen Drehplan importieren" — dabei wird <b>nur diese Tabelle</b> ersetzt, Zulieferer, Termine und Fotos bleiben unverändert erhalten.</div>
     <div class="card"><div class="dp-wrap"><table class="dp-table" id="dp-table">
       <thead><tr><th>Tag</th><th>Datum</th><th>Wochentag</th><th>Typ</th><th>Hauptmotiv / Drehort</th><th>Zusatzmotive (bei Motivwechsel, mit „/" trennen)</th><th>Notiz</th><th></th></tr></thead>
       <tbody>${rows.map(renderDpRow).join('')}</tbody>
@@ -1040,6 +1043,8 @@ function renderDpRow(d){
   </tr>`;
 }
 function bindDrehplanEvents(){
+  const importInp=document.getElementById('dp-import-file');
+  if(importInp) importInp.addEventListener('change',e=>{ const f=e.target.files[0]; if(f) importDrehplanFile(f); importInp.value=''; });
   const table=document.getElementById('dp-table'); if(!table) return;
   table.querySelectorAll('tr[data-id]').forEach(tr=>{
     const id=tr.dataset.id;
@@ -1305,6 +1310,34 @@ function savePhotoCaption(id){
   savePhotos(); closeModal(); render(); toast('Gespeichert');
 }
 
+/* ---------------------------- Drehplan-Import (neue PDF-Fassung) ---------------------------- */
+function exportDrehplanJSON(){
+  const clean=state.drehplan.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(({id,...rest})=>rest);
+  downloadFile('drehplan-'+todayISO()+'.json',JSON.stringify(clean,null,2),'application/json');
+}
+async function importDrehplanFile(file){
+  try{
+    const raw=JSON.parse(await file.text());
+    const arr=Array.isArray(raw)?raw:(Array.isArray(raw.drehplan)?raw.drehplan:null);
+    if(!arr) throw new Error('Erwarte ein JSON-Array mit Drehplan-Einträgen (oder {"drehplan":[...]})');
+    const cleaned=arr.map(d=>({
+      id:uid(),
+      day:d.day!=null?String(d.day):'',
+      date:d.date||'',
+      weekday:d.weekday||'',
+      type:DP_TYPES.some(t=>t.v===d.type)?d.type:'dreh',
+      mainLocation:d.mainLocation||'',
+      additionalLocations:Array.isArray(d.additionalLocations)?d.additionalLocations:(d.additionalLocations?String(d.additionalLocations).split('/').map(s=>s.trim()).filter(Boolean):[]),
+      note:d.note||'',
+    }));
+    if(!confirm(`Aktuellen Drehplan (${state.drehplan.length} Einträge) durch diese Datei (${cleaned.length} Einträge) ersetzen?\n\nZulieferer, Termine und Fotos bleiben davon komplett unberührt.`)) return;
+    state.drehplan=cleaned;
+    await saveDrehplan();
+    toast('Neuer Drehplan importiert ('+cleaned.length+' Einträge)');
+    render();
+  }catch(e){ toast('Fehler beim Import: '+e.message); }
+}
+
 /* ---------------------------- Backup Export/Import ---------------------------- */
 function exportBackup(){
   const payload={format:'sep_zulieferer_backup_v1',savedAt:new Date().toISOString(),suppliers:state.suppliers,appointments:state.appointments,photos:state.photos,drehplan:state.drehplan};
@@ -1355,6 +1388,8 @@ document.addEventListener('click', async (e)=>{
     case 'cal-next': state.calMonth=new Date(state.calMonth.getFullYear(),state.calMonth.getMonth()+1,1); render(); break;
     case 'cal-today': state.calMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1); render(); break;
     case 'add-dp-row': addDrehplanRow(); break;
+    case 'export-dp-json': exportDrehplanJSON(); break;
+    case 'import-dp-json': document.getElementById('dp-import-file')?.click(); break;
     case 'add-dp-row-date': addDrehplanRow(t.dataset.date); closeModal(); setView('drehplan'); break;
     case 'del-dp-row': deleteDrehplanRow(t.dataset.id); break;
     case 'open-settings': openSettings(); break;
