@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>September – Zulieferer &amp; Drehplan</title>
+<style>
+  :root{
+    --bg:#F6F2E9; --bg-card:#FDFBF6; --bg-sunk:#EFEADE;
+    --ink:#18150F; --ink-soft:#4B4339; --ink-muted:#8A8073;
+    --line:#E4DBC7; --line-strong:#CFC3A5;
+    --green:#2F5344; --green-soft:#E0EAE1;
+    --terra:#AE4E2F; --terra-soft:#F2DED2;
+    --gold:#B89A5A; --gold-soft:#F4EAD0;
+    --blue:#3B5A78; --blue-soft:#DEE7EE;
+    --shadow:0 1px 2px rgba(40,30,10,0.04),0 4px 14px rgba(40,30,10,0.03);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{font-family:'Georgia',serif;font-weight:600;margin:0}
+  a{color:var(--green)}
+  button{font:inherit;cursor:pointer}
+  code{background:var(--bg-sunk);padding:1px 5px;border-radius:5px;font-size:12px}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:6px}
+
+  /* ---- Layout ---- */
+  #app{min-height:100vh;display:flex;flex-direction:column}
+  header.topbar{position:sticky;top:0;z-index:20;background:var(--bg-card);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:14px}
+  header.topbar .brand{display:flex;flex-direction:column;line-height:1.15;margin-right:6px}
+  header.topbar .brand b{font-family:Georgia,serif;font-size:17px}
+  header.topbar .brand span{font-size:11px;color:var(--ink-muted)}
+  nav.tabs{display:flex;gap:4px;flex:1;overflow-x:auto}
+  nav.tabs button{border:none;background:transparent;padding:8px 12px;border-radius:10px;color:var(--ink-soft);font-size:13.5px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  nav.tabs button.active{background:var(--green-soft);color:var(--green);font-weight:600}
+  nav.tabs button:hover:not(.active){background:var(--bg-sunk)}
+  .icon{width:16px;height:16px;flex:none;display:inline-flex;align-items:center;justify-content:center;vertical-align:-3px}
+  .icon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8}
+  .topbar-right{display:flex;align-items:center;gap:8px}
+  #sync-indicator{font-size:11px;color:var(--ink-muted);display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:8px}
+  #sync-indicator.err{color:var(--terra)}
+  #sync-indicator.ok{color:var(--green)}
+  .iconbtn{border:1px solid var(--line);background:var(--bg-card);width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft)}
+  .iconbtn:hover{background:var(--bg-sunk)}
+
+  main{flex:1;padding:18px;max-width:1180px;margin:0 auto;width:100%}
+  .view{display:none}
+  .view.active{display:block;animation:fade .15s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .row.between{justify-content:space-between}
+  .grow{flex:1}
+  .card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .pad{padding:16px}
+  .stack{display:flex;flex-direction:column;gap:12px}
+  .divider{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-muted);margin:14px 0 6px;font-weight:600}
+
+  .btn{border:1px solid var(--line-strong);background:var(--bg-card);color:var(--ink);padding:9px 14px;border-radius:10px;font-size:13.5px;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{background:var(--bg-sunk)}
+  .btn-primary{background:var(--green);border-color:var(--green);color:#fff}
+  .btn-primary:hover{background:#25422f}
+  .btn-green{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+  .btn-block{width:100%;justify-content:center}
+  .btn-sm{padding:5px 10px;font-size:12.5px;border-radius:8px}
+  .btn-ghost{border-color:transparent;background:transparent}
+  .btn-ghost:hover{background:var(--bg-sunk)}
+  .btn-danger{color:var(--terra);border-color:var(--terra-soft)}
+  .btn-danger:hover{background:var(--terra-soft)}
+
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:12px;color:var(--ink-soft);font-weight:600}
+  .field input,.field select,.field textarea{border:1px solid var(--line-strong);background:var(--bg-card);border-radius:9px;padding:9px 10px;font:inherit;color:var(--ink)}
+  .field textarea{resize:vertical;min-height:60px}
+  .field .hint{font-size:11px;color:var(--ink-muted)}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .field-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  @media(max-width:560px){.field-row,.field-row3{grid-template-columns:1fr}}
+  .info-box{background:var(--gold-soft);border:1px solid var(--line);border-radius:11px;padding:12px 14px;font-size:12.5px;color:var(--ink-soft)}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:600}
+  .pill.dreh{background:var(--terra-soft);color:var(--terra)}
+  .pill.frei{background:var(--bg-sunk);color:var(--ink-muted)}
+  .pill.unit{background:var(--blue-soft);color:var(--blue)}
+  .pill.status-geplant{background:var(--gold-soft);color:#8a6d1f}
+  .pill.status-bestaetigt{background:var(--green-soft);color:var(--green)}
+  .pill.status-erledigt{background:var(--bg-sunk);color:var(--ink-muted)}
+  .pill.status-abgesagt{background:var(--terra-soft);color:var(--terra)}
+
+  .empty{padding:40px 20px;text-align:center;color:var(--ink-muted)}
+  .empty .icon{width:34px;height:34px;margin:0 auto 10px;opacity:.5}
+
+  /* ---- Dashboard / Kalender ---- */
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .cal-head h2{font-size:19px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal-dow{font-size:11px;color:var(--ink-muted);text-align:center;padding-bottom:4px;font-weight:600}
+  .cal-day{background:var(--bg-card);border:1px solid var(--line);border-radius:10px;min-height:92px;padding:6px;display:flex;flex-direction:column;gap:4px;cursor:pointer;position:relative;overflow:hidden}
+  .cal-day:hover{border-color:var(--line-strong)}
+  .cal-day.out{opacity:.35}
+  .cal-day.today{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
+  .cal-day .dnum{font-size:12px;font-weight:700;color:var(--ink-soft)}
+  .cal-day .dloc{font-size:10.5px;background:var(--terra-soft);color:var(--terra);border-radius:6px;padding:2px 5px;line-height:1.25;font-weight:600;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .cal-day .dfrei{font-size:10px;color:var(--ink-muted);font-style:italic}
+  .cal-day .dappt{font-size:10px;background:var(--blue-soft);color:var(--blue);border-radius:6px;padding:1.5px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cal-day .dmore{font-size:10px;color:var(--ink-muted)}
+  @media(max-width:720px){
+    .cal-grid{grid-template-columns:1fr}
+    .cal-dow{display:none}
+    .cal-day{min-height:0;flex-direction:row;align-items:center;gap:8px}
+    .cal-day .dnum{min-width:60px}
+    .cal-day .dloc,.cal-day .dappt{display:inline-block;-webkit-line-clamp:1}
+  }
+
+  .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  @media(max-width:720px){.kpi-row{grid-template-columns:1fr 1fr}}
+  .kpi{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+  .kpi .n{font-family:Georgia,serif;font-size:24px}
+  .kpi .l{font-size:11.5px;color:var(--ink-muted)}
+
+  /* ---- Zulieferer ---- */
+  .supplier-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .supplier-card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);cursor:pointer;display:flex;flex-direction:column;gap:8px}
+  .supplier-card:hover{border-color:var(--line-strong)}
+  .supplier-card .sname{font-family:Georgia,serif;font-size:16px}
+  .supplier-card .scat{font-size:11px;color:var(--green);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .supplier-card .smeta{font-size:12px;color:var(--ink-muted);display:flex;flex-direction:column;gap:2px}
+  .supplier-card .sfoot{display:flex;gap:8px;font-size:11px;color:var(--ink-muted);margin-top:2px}
+
+  .detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px}
+  .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;font-size:13px}
+  @media(max-width:560px){.contact-grid{grid-template-columns:1fr}}
+  .contact-grid .ci{display:flex;gap:8px;align-items:flex-start}
+  .contact-grid .ci .icon{margin-top:2px;color:var(--ink-muted)}
+
+  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+  .photo-thumb{aspect-ratio:1;border-radius:10px;border:1px solid var(--line);background:var(--bg-sunk);position:relative;overflow:hidden;cursor:pointer}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .photo-thumb .pcap{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;font-size:10px;padding:10px 6px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .photo-thumb .pdel{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;opacity:0}
+  .photo-thumb:hover .pdel{opacity:1}
+  .drop-zone{border:1.5px dashed var(--line-strong);border-radius:12px;padding:16px;text-align:center;background:var(--bg-sunk);cursor:pointer}
+  .drop-zone:hover{border-color:var(--ink)}
+  .drop-zone.drag{border-color:var(--green);background:var(--green-soft)}
+
+  .appt-list{display:flex;flex-direction:column;gap:8px}
+  .appt-item{border:1px solid var(--line);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:10px;background:var(--bg-card)}
+  .appt-item .adate{font-weight:700;font-size:13px;min-width:64px}
+  .appt-item .abody{flex:1;min-width:0}
+  .appt-item .atitle{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .appt-item .asub{font-size:11.5px;color:var(--ink-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .appt-actions{display:flex;gap:4px}
+
+  /* ---- Drehplan Tabelle ---- */
+  table.dp-table{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.dp-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-muted);padding:6px 8px;border-bottom:1px solid var(--line-strong)}
+  table.dp-table td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.dp-table tr:hover td{background:var(--bg-sunk)}
+  table.dp-table input,table.dp-table select{width:100%;border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 5px;font:inherit;color:inherit}
+  table.dp-table input:hover,table.dp-table select:hover,table.dp-table input:focus,table.dp-table select:focus{border-color:var(--line-strong);background:var(--bg-card)}
+  .dp-wrap{overflow-x:auto}
+  .dp-actions{width:1%;white-space:nowrap}
+
+  /* ---- Modal ---- */
+  .modal-bg{position:fixed;inset:0;background:rgba(20,16,8,.42);display:flex;align-items:flex-end;justify-content:center;z-index:100;backdrop-filter:blur(2px)}
+  @media(min-width:720px){.modal-bg{align-items:center}}
+  .modal{background:var(--bg-card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  @media(min-width:720px){.modal{border-radius:16px}}
+  .modal-head{position:sticky;top:0;background:var(--bg-card);display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line);z-index:2}
+  .modal-head h3{font-size:17px}
+  .modal-body{padding:18px}
+  .modal-foot{position:sticky;bottom:0;background:var(--bg-card);padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:8px}
+
+  .settings-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
+  .settings-tabs button{border:none;background:transparent;padding:9px 4px;font-size:13px;color:var(--ink-muted);white-space:nowrap;border-bottom:2px solid transparent}
+  .settings-tabs button.active{color:var(--ink);border-color:var(--green);font-weight:600}
+
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+
+  .toggle{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .toggle input{display:none}
+  .toggle .switch{width:36px;height:21px;background:var(--line-strong);border-radius:99px;position:relative;flex:none;transition:background .15s}
+  .toggle .switch::after{content:'';position:absolute;top:2px;left:2px;width:17px;height:17px;background:#fff;border-radius:50%;transition:transform .15s}
+  .toggle input:checked + .switch{background:var(--green)}
+  .toggle input:checked + .switch::after{transform:translateX(15px)}
+  .toggle .label .t{font-size:13px;font-weight:600}
+  .toggle .label .sub{font-size:11.5px;color:var(--ink-muted)}
+
+  .search-bar{display:flex;align-items:center;gap:8px;border:1px solid var(--line-strong);background:var(--bg-card);border-radius:10px;padding:7px 10px}
+  .search-bar input{border:none;background:transparent;flex:1;font:inherit;outline:none}
+
+  .loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:10px;color:var(--ink-muted);font-size:13px}
+</style>
+</head>
+<body>
+<div id="loading" class="loading-screen"><div style="font-family:Georgia,serif;font-size:20px;color:var(--ink)">September</div><div>lädt…</div></div>
+<div id="app" style="display:none">
+  <header class="topbar">
+    <div class="brand"><b>September</b><span>Zulieferer &amp; Drehplan</span></div>
+    <nav class="tabs" id="tabs"></nav>
+    <div class="topbar-right">
+      <div id="sync-indicator"></div>
+      <button class="iconbtn" data-action="open-settings" title="Einstellungen"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-1.7-1L15 3h-6l-.3 2.4a7.7 7.7 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 1.7 1L9 21h6l.3-2.4a7.7 7.7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6z" stroke-linejoin="round"/></svg></span></button>
+    </div>
+  </header>
+  <main>
+    <div class="view" id="view-dashboard"></div>
+    <div class="view" id="view-suppliers"></div>
+    <div class="view" id="view-supplier-detail"></div>
+    <div class="view" id="view-appointments"></div>
+    <div class="view" id="view-drehplan"></div>
+  </main>
+</div>
+<div id="modal-root"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+/* ============================================================================
+   SEPTEMBER — ZULIEFERER & DREHPLAN TOOL
+   Statische Single-File-App. Lokale Persistenz via IndexedDB,
+   optionaler Cloud-Sync via Dropbox (PKCE OAuth, kein Server nötig).
+   ============================================================================ */
+
+/* ---------------------------- Icons ---------------------------- */
+const ICON = {
+  home:'<svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 10v10h5v-6h4v6h5V10" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  users:'<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c.6-3.6 3.4-6 6.5-6s5.9 2.4 6.5 6" stroke-linecap="round"/><path d="M16 8.2a3 3 0 1 1 3.2 3M17.6 14c2.6.3 4.6 2.3 5.1 5.6" stroke-linecap="round"/></svg>',
+  calendar:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round"/></svg>',
+  list:'<svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  camera:'<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
+  plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>',
+  edit:'<svg viewBox="0 0 24 24"><path d="M4 20l.9-4.2L16.4 4.3a1.5 1.5 0 0 1 2.1 0l1.2 1.2a1.5 1.5 0 0 1 0 2.1L8.2 19.1 4 20z" stroke-linejoin="round"/></svg>',
+  trash:'<svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  close:'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>',
+  download:'<svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l4-4m-4 4l-4-4M5 19h14" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  upload:'<svg viewBox="0 0 24 24"><path d="M12 20V9m0 0l4 4m-4-4l-4 4M5 5h14" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  phone:'<svg viewBox="0 0 24 24"><path d="M5 4h3.5l1.5 5-2.3 1.6a11 11 0 0 0 5.7 5.7L14.5 14l5 1.5V19a1.5 1.5 0 0 1-1.6 1.5A16 16 0 0 1 3.5 5.6 1.5 1.5 0 0 1 5 4z" stroke-linejoin="round"/></svg>',
+  mail:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 6.5l8 6 8-6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  pin:'<svg viewBox="0 0 24 24"><path d="M12 21s7-7.2 7-12a7 7 0 1 0-14 0c0 4.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>',
+  link:'<svg viewBox="0 0 24 24"><path d="M9 15l6-6M8 12l-2 2a4 4 0 0 0 5.6 5.6l2-2M16 12l2-2a4 4 0 0 0-5.6-5.6l-2 2" stroke-linecap="round"/></svg>',
+  chevL:'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevR:'<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check:'<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  clock:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2" stroke-linecap="round"/></svg>',
+  sync:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.6-5.7M20 12a8 8 0 0 1-13.6 5.7M17 3v4h-4M7 21v-4h4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-1.7-1L15 3h-6l-.3 2.4a7.7 7.7 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 1.7 1L9 21h6l.3-2.4a7.7 7.7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6z" stroke-linejoin="round"/></svg>',
+  image:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5.5-5.5L4 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  search:'<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3" stroke-linecap="round"/></svg>',
+  building:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 7h1M8 11h1M8 15h1M12 7h1M12 11h1M12 15h1M16 7h1M16 11h1M16 15h1M10 21v-4h4v4" stroke-linecap="round"/></svg>',
+  back:'<svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+const ic=(name,cls)=>`<span class="icon${cls?' '+cls:''}">${ICON[name]||''}</span>`;
+
+/* ---------------------------- Storage (IndexedDB) ---------------------------- */
+const appStorage = (function(){
+  const DB_NAME='september_zulieferer', STORE='kv', DB_VERSION=1;
+  let dbPromise=null;
+  function openDB(){
+    if(!dbPromise){
+      dbPromise=new Promise((resolve,reject)=>{
+        if(typeof indexedDB==='undefined'){reject(new Error('IndexedDB nicht verfügbar'));return;}
+        const req=indexedDB.open(DB_NAME,DB_VERSION);
+        req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE); };
+        req.onsuccess=()=>resolve(req.result);
+        req.onerror=()=>reject(req.error);
+      });
+    }
+    return dbPromise;
+  }
+  return {
+    async get(key){
+      const db=await openDB();
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction(STORE,'readonly');
+        const req=tx.objectStore(STORE).get(key);
+        req.onsuccess=()=>{ const v=req.result; resolve(v!==undefined?{key,value:v}:null); };
+        req.onerror=()=>reject(req.error);
+      });
+    },
+    async set(key,value){
+      const db=await openDB();
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction(STORE,'readwrite');
+        const req=tx.objectStore(STORE).put(value,key);
+        req.onsuccess=()=>resolve({key,value});
+        req.onerror=()=>reject(req.error);
+      });
+    },
+    async delete(key){
+      const db=await openDB();
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction(STORE,'readwrite');
+        const req=tx.objectStore(STORE).delete(key);
+        req.onsuccess=()=>resolve({key,deleted:true});
+        req.onerror=()=>reject(req.error);
+      });
+    },
+  };
+})();
+
+/* ---------------------------- Helpers ---------------------------- */
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
+function escapeHtml(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function escapeAttr(s){return escapeHtml(s);}
+let toastTimer=null;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2600);
+}
+function fmtDate(iso,opts){
+  if(!iso) return '';
+  const d=new Date(iso+'T00:00:00');
+  if(isNaN(d)) return iso;
+  return d.toLocaleDateString('de-DE',opts||{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function fmtDateLong(iso){
+  if(!iso) return '';
+  const d=new Date(iso+'T00:00:00');
+  if(isNaN(d)) return iso;
+  return d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+}
+function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function isoToDate(iso){return new Date(iso+'T00:00:00');}
+function dateToISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function downloadFile(filename,content,mime){
+  const blob=new Blob([content],{type:mime||'text/plain'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},400);
+}
+function debounce(fn,ms){let t;return (...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
+
+/* ---------------------------- State ---------------------------- */
+const DEFAULT_SETTINGS = {
+  dbxAppKey:'', dbxRefreshToken:'', dbxAutoSync:true,
+  dbxPath:'/september-zulieferer-daten.json', dbxPhotosFolder:'/fotos',
+};
+const SUPPLIER_CATEGORIES = ['Requisiten','Kostüm','Set-Bau / Möbel','Fahrzeuge','Technik','Verpflegung / Catering','Location','Personal / Statisten','Sonstiges'];
+const APPT_STATUS = [
+  {v:'geplant',l:'Geplant'},
+  {v:'bestaetigt',l:'Bestätigt'},
+  {v:'erledigt',l:'Erledigt'},
+  {v:'abgesagt',l:'Abgesagt'},
+];
+const DP_TYPES = [
+  {v:'dreh',l:'Drehtag'},
+  {v:'2nd-unit',l:'2nd Unit'},
+  {v:'3rd-unit',l:'3rd Unit'},
+  {v:'c-unit',l:'C Cam Unit'},
+  {v:'dreh-frei',l:'Drehfrei'},
+  {v:'sonstig',l:'Sonstiges'},
+];
+function dpTypeLabel(v){return (DP_TYPES.find(t=>t.v===v)||{}).l||v;}
+
+/* Startdaten aus "SEP_Drehplan 2.0 vom 4.9._20260904.pdf" (Stand 04.09.2026) extrahiert.
+   Wird beim allerersten Start als Drehplan-Tabelle vorbefüllt; danach frei editierbar
+   und Teil der normalen Speicherung/Dropbox-Sync (diese Konstante wird nicht mehr genutzt). */
+const SEED_DREHPLAN = [{"day": "1", "date": "2026-09-15", "weekday": "Di", "type": "dreh", "mainLocation": "Franz Josef Strauß Flughafen, Nordallee 25, 85356 Oberding", "additionalLocations": ["Taxi / Autobahn (Flughafen -> Wiesn), gegen Ende des Drehtags (ca. 17:15-18:45)"], "note": "Info: Lidar Scan (VFX) im Schottenhamelzelt"}, {"day": "2", "date": "2026-09-16", "weekday": "Mi", "type": "dreh", "mainLocation": "V-Markt Euro Industrie Park, Maria-Probst-Str 6, 80939 München", "additionalLocations": ["Isar / Corneliusbrücke, 81541 München (Nachmittag ab ca. 16:15, inkl. Minimotivwechsel ans Isar-Ufer ca. 19:00-19:30)"], "note": "Cast#1 musste um 15:00 Uhr das Set verlassen"}, {"day": "-", "date": "2026-09-17", "weekday": "Do", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei. Pressetag auf der Wiesn ab 10:00 / Bandprobe Südherz. Begehung Festwiese im Rahmen des Pressetags. Vertraglich drehfrei definierter Tag für Alle."}, {"day": "3", "date": "2026-09-18", "weekday": "Fr", "type": "dreh", "mainLocation": "Pfeuferstr 1, 81373 München-Sendling (Wohnblock Miri, Spielplatz)", "additionalLocations": ["Pfeuferstr 2, München-Sendling (WHG Miri Balkon->Innenhof, per Minimove)"], "note": "Versetzter Dreh. Anschließend Rückweg zum Set (Perücke ID 4*, 2026->2027-Kontinuität)"}, {"day": "3 (C Cam Unit)", "date": "2026-09-18", "weekday": "Fr", "type": "c-unit", "mainLocation": "Pfeuferstr, München-Sendling (Wohnblock Miri - Etablierer)", "additionalLocations": [], "note": "2. Unit / C Cam Unit dreht parallel zur Main Unit"}, {"day": "2nd Unit Drehtag", "date": "2026-09-19", "weekday": "Sa", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Oktoberfest Anstichtag / Eröffnung)", "additionalLocations": [], "note": "Für Main Unit drehfrei. 2nd+3rd Unit mit 2 Kameras auf Festwiese + im Zelt, plus Christian Cam am Straßenrand und Nepomuk D Cam. Anstichtag: Oberbürgermeister zapft das erste Fass an (O'zapft is!)."}, {"day": "3rd Unit", "date": "2026-09-20", "weekday": "So", "type": "3rd-unit", "mainLocation": "Theresienwiese, München (Trachtenumzug, 10:00-12:00)", "additionalLocations": ["Hotel Königshof, Karlsplatz 25, 80335 München (Plates GYM/SPA-Bereich)"], "note": "Für Main Unit: Begehung Wiesn mit Regie und DoP (drehfrei). 3rd Unit dreht mit D Nepomuk Cam."}, {"day": "4", "date": "2026-09-21", "weekday": "Mo", "type": "dreh", "mainLocation": "Theresienwiese, München (während der Wiesn, 2/11)", "additionalLocations": [], "note": "Wiesn-Aufbau, Schottenhamelzelt-Aufbau, Münchener Rutschn, Riesenradeingang, Jumbo (Kinderhelikopter). Nach Drehschluss: Begehung mit Regie, DoP, 2nd Unit."}, {"day": "4 (2nd/3rd Unit)", "date": "2026-09-21", "weekday": "Mo", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Geisterbahn, Münchener Rutschn, Fahrgeschäfte, Straßenorgel, Lebkuchenherzen-Stand)", "additionalLocations": [], "note": "2nd Unit C Cam mit Nepomuk als 2nd Unit Director; zusätzlich 3rd Unit dokumentarische Aufnahmen (D Cam Nepomuk)"}, {"day": "5", "date": "2026-09-22", "weekday": "Di", "type": "dreh", "mainLocation": "Theresienwiese, München (Bierzelt N°3 Schützenzelt, Galerie und Terrasse)", "additionalLocations": [], "note": "Familientag bis 19:00"}, {"day": "5 (2nd Unit)", "date": "2026-09-22", "weekday": "Di", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Etablierer und Plates, u.a. Kasperltheater Atrium)", "additionalLocations": [], "note": "2nd Unit C Cam dreht Etablierer und Plates parallel zur Main Unit"}, {"day": "6", "date": "2026-09-23", "weekday": "Mi", "type": "dreh", "mainLocation": "Theresienwiese, München (Schottenhamelzelt: Treppe, Bühne, Gang, Küche->Gang)", "additionalLocations": [], "note": "Seatfiller Drehtag 6. Erste Möglichkeit für Songs mit der Band Schwarzfischer."}, {"day": "6 (2nd Unit / VFX Array Rig)", "date": "2026-09-23", "weekday": "Mi", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Schottenhamelzelt, 4way VFX Array Rig Plates, Day 1/3)", "additionalLocations": [], "note": "Langer Drehtag für die VFX Array Rig Unit (Position Miri)"}, {"day": "6 (3rd Unit)", "date": "2026-09-23", "weekday": "Mi", "type": "3rd-unit", "mainLocation": "Theresienwiese, München (Wiesn-Etablierer)", "additionalLocations": [], "note": "3rd Unit D Nepomuk Cam dreht dokumentarisch"}, {"day": "7", "date": "2026-09-24", "weekday": "Do", "type": "dreh", "mainLocation": "Theresienwiese, München (Teufelsrad, Eingang Festwiese, Schießstand)", "additionalLocations": [], "note": "Teufelsrad verfügbar von 9:00-14:00"}, {"day": "7 (2nd Unit)", "date": "2026-09-24", "weekday": "Do", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Plates und Etablierer versetzt, u.a. Kasperltheater Atrium)", "additionalLocations": [], "note": "2nd Unit C Cam"}, {"day": "7 (3rd Unit / VFX Rig)", "date": "2026-09-24", "weekday": "Do", "type": "3rd-unit", "mainLocation": "Theresienwiese, München (Schottenhamelzelt, 4way VFX Array Rig Plates, Day 2/3)", "additionalLocations": [], "note": ""}, {"day": "8", "date": "2026-09-25", "weekday": "Fr", "type": "dreh", "mainLocation": "Theresienwiese, München (Riesenrad, Schottenhamelzelt Außenbalkon, Kinderkarussell 'Birk', Schießstand)", "additionalLocations": [], "note": ""}, {"day": "8 (2nd Unit, Nachtdreh)", "date": "2026-09-25", "weekday": "Fr", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Funhouse, XXL Höhenrausch, Heidi Coaster, Alpinabahn)", "additionalLocations": [], "note": "2nd Unit C Cam dreht mit Regie und DoP in der Dunkelheit mit Cast, nachdem die Main Unit fertig gedreht hat"}, {"day": "-", "date": "2026-09-26", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "48+11 Turnaround"}, {"day": "-", "date": "2026-09-27", "weekday": "So", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei für Main Unit"}, {"day": "3rd Unit", "date": "2026-09-27", "weekday": "So", "type": "3rd-unit", "mainLocation": "Theresienwiese, München (Fahrgeschäfte, Treppe unter Bavaria - Chor)", "additionalLocations": [], "note": "3rd Unit D Nepomuk Cam"}, {"day": "9", "date": "2026-09-28", "weekday": "Mo", "type": "dreh", "mainLocation": "Theresienwiese, München (Zelt N°2 Ochsenbraterei; Schottenhamelzelt Treppe außen->Empore)", "additionalLocations": [], "note": "Hinweis: falls Bilder 65T1/65T2 nicht fertig werden, weichen sie auf Drehtag 11 aus"}, {"day": "9 (2nd Unit)", "date": "2026-09-28", "weekday": "Mo", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Plates Büro Ariane im Schottenhamelzelt, Kinderkarussell 'Pirateninsel', Pitts Todeswand)", "additionalLocations": [], "note": "2nd Unit C Cam"}, {"day": "9 (3rd Unit)", "date": "2026-09-28", "weekday": "Mo", "type": "3rd-unit", "mainLocation": "Theresienwiese, München (Stand Lebkuchenherzen / Paradies Süssigkeiten)", "additionalLocations": [], "note": "3rd Unit D Nepomuk Cam, Foodshot"}, {"day": "10", "date": "2026-09-29", "weekday": "Di", "type": "dreh", "mainLocation": "Theresienwiese, München (Wurfbude 'Stey' / Dosenwerfen; Schottenhamelzelt)", "additionalLocations": [], "note": "Familientag bis 19:00. Versetzter Dreh."}, {"day": "11", "date": "2026-09-30", "weekday": "Mi", "type": "dreh", "mainLocation": "Theresienwiese, München (Feststraße->Schottenhamelzelt, Gang, Eingangsbereich, Schaustellerstraße, bis 23:00 auf der Wiesn)", "additionalLocations": [], "note": "Muss um 1:30 Uhr die Festwiese verlassen haben"}, {"day": "11 (2nd Unit)", "date": "2026-09-30", "weekday": "Mi", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Riesenrad Gondel - Eshots und Plates)", "additionalLocations": [], "note": "2nd Unit versetzt"}, {"day": "12", "date": "2026-10-01", "weekday": "Do", "type": "dreh", "mainLocation": "Theresienwiese, München (Kasperltheater, Riesenrad Kasse/Gondel/Davor)", "additionalLocations": [], "note": "Versetzter Dreh. Muss um 1:00 Uhr die Festwiese verlassen haben."}, {"day": "12 (2nd Unit / D Cam)", "date": "2026-10-01", "weekday": "Do", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Geisterpalast/Geisterbahn)", "additionalLocations": [], "note": "2nd Unit D Cam Nepomuk dreht mit Cast Fahrgeschäfte"}, {"day": "12 (3rd Unit / C Cam)", "date": "2026-10-01", "weekday": "Do", "type": "3rd-unit", "mainLocation": "Theresienwiese, München (Distel-Autoscooter, Skylift Tower - Etablierer und Plates)", "additionalLocations": [], "note": "3rd Unit (TBC: 2nd Unit C Cam) dreht mit Cast, Regie und DoP"}, {"day": "13", "date": "2026-10-02", "weekday": "Fr", "type": "dreh", "mainLocation": "Theresienwiese, München (mehrere Orte außerhalb der Festwiese: Presseeingang Süd, Esperantoplatz Ost, Bavariaring/Hauptzelteingang Nord, Bavariaring/Schaustellerstraße Nord)", "additionalLocations": ["Wiesn - Kettenkarussell (Wellenflieger), Eingang Festwiese, Funhouse"], "note": "Versetzter Dreh. Muss um 1:30 Uhr die Festwiese verlassen haben."}, {"day": "13 (3rd Unit)", "date": "2026-10-02", "weekday": "Fr", "type": "3rd-unit", "mainLocation": "Theresienwiese, München (Toboggan)", "additionalLocations": [], "note": "3rd Unit D Nepomuk Cam. Cast ID 1+4* dreht erst mit dieser Unit, dann mit der Main Unit."}, {"day": "13 (VFX Array Rig Backup)", "date": "2026-10-02", "weekday": "Fr", "type": "3rd-unit", "mainLocation": "Theresienwiese, München (Schottenhamelzelt Plates)", "additionalLocations": [], "note": "Backup für 4way VFX Array Rig (Position Miri)"}, {"day": "-", "date": "2026-10-03", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "48+11 Turnaround"}, {"day": "-", "date": "2026-10-04", "weekday": "So", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei für Main Unit"}, {"day": "2nd/3rd Unit (VFX Array Rig Day 3/3)", "date": "2026-10-04", "weekday": "So", "type": "2nd-unit", "mainLocation": "Theresienwiese, München (Schottenhamelzelt, Plates mit Regie, DoP und 4way VFX Array Rig)", "additionalLocations": [], "note": "2nd Unit (C Cam) und 3rd Unit (D Nepomuk Cam) drehen gemeinsam"}, {"day": "-", "date": "2026-10-05", "weekday": "Mo", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei"}, {"day": "-", "date": "2026-10-06", "weekday": "Di", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "AZV Tag #1 (Option 1/4): Schneideraum + VFX Denis Plates selektieren, anschließend mit Regie und DoP sichten (relevant für Dreh auf Empore). Zusätzlich: Vorleuchten Wohnung Miri und abends Motivabnahme Whg Miri mit Regie und DoP."}, {"day": "14", "date": "2026-10-07", "weekday": "Mi", "type": "dreh", "mainLocation": "Hotel Königshof, Karlsplatz 25, 80335 München", "additionalLocations": ["Gold Bar, 3. OG mit Terrasse (Königshof)"], "note": "Leicht versetzter Dreh. Rezeption/Restaurantbereich, Lobby, Zimmer Tom (Terrace Suite #537)"}, {"day": "15", "date": "2026-10-08", "weekday": "Do", "type": "dreh", "mainLocation": "Hotel Königshof, Karlsplatz 25, 80335 München", "additionalLocations": [], "note": "Leicht versetzter Dreh. Raya Restaurant (bis 13h verfügbar), Gym/The View (9. OG)"}, {"day": "16", "date": "2026-10-09", "weekday": "Fr", "type": "dreh", "mainLocation": "Studiobau (Miri WHG 1/8) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": "Leicht versetzter Dreh"}, {"day": "16 (2nd Unit)", "date": "2026-10-09", "weekday": "Fr", "type": "2nd-unit", "mainLocation": "Wald/Hügel Richtung Neuschwanstein (Motiv evtl. Original Neuschwanstein)", "additionalLocations": [], "note": "2nd Unit C Cam oder KI-generiert (noch offen)"}, {"day": "-", "date": "2026-10-10", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "48+11 Turnaround. Option 2/4: Plates sichten (Regie, DoP, VFX), relevant für Dreh auf Empore."}, {"day": "-", "date": "2026-10-11", "weekday": "So", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei"}, {"day": "17", "date": "2026-10-12", "weekday": "Mo", "type": "dreh", "mainLocation": "Studiobau (Miri WHG 2/8) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": "Info: ID 4* (Leo) hat Herbstferien vom 12.10. bis 25.10."}, {"day": "18", "date": "2026-10-13", "weekday": "Di", "type": "dreh", "mainLocation": "Studiobau (Miri WHG 3/8) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "19", "date": "2026-10-14", "weekday": "Mi", "type": "dreh", "mainLocation": "Kasperltheater (1/2) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": "Wird mit Whg Miri gecovert (Drehtag 21)"}, {"day": "20", "date": "2026-10-15", "weekday": "Do", "type": "dreh", "mainLocation": "Kasperltheater (2/2) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": "Wird mit Whg Miri gecovert (Drehtag 22). Rolle Leo muss separiert werden - zu viel Pensum, zu viele Stunden."}, {"day": "21", "date": "2026-10-16", "weekday": "Fr", "type": "dreh", "mainLocation": "Studiobau (Miri WHG 4/8) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "-", "date": "2026-10-17", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "48+11 Turnaround. Option 3/4: Plates sichten (Regie, DoP, VFX), relevant für Dreh auf Empore."}, {"day": "-", "date": "2026-10-18", "weekday": "So", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei"}, {"day": "22", "date": "2026-10-19", "weekday": "Mo", "type": "dreh", "mainLocation": "Studiobau (Miri WHG 5/8) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "23", "date": "2026-10-20", "weekday": "Di", "type": "dreh", "mainLocation": "Studiobau (Miri WHG 6/8) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "24", "date": "2026-10-21", "weekday": "Mi", "type": "dreh", "mainLocation": "Studiobau (Miri WHG 7/8) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "25", "date": "2026-10-22", "weekday": "Do", "type": "dreh", "mainLocation": "Studiobau (Miri WHG 8/8) @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "-", "date": "2026-10-23", "weekday": "Fr", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "AZV Tag #2 (Option 4/4): Plates sichten (Regie, DoP, VFX), relevant für Dreh auf Empore."}, {"day": "-", "date": "2026-10-24", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "48+11 Turnaround - Einleuchten Empore"}, {"day": "-", "date": "2026-10-25", "weekday": "So", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Zeitumstellung"}, {"day": "26", "date": "2026-10-26", "weekday": "Mo", "type": "dreh", "mainLocation": "Empore (1/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "27", "date": "2026-10-27", "weekday": "Di", "type": "dreh", "mainLocation": "Büro Ariane + Empore (2/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "28", "date": "2026-10-28", "weekday": "Mi", "type": "dreh", "mainLocation": "Empore (3/10) + Ausschank @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": "Anschließend kann Büro Ariane zur Umkleide (Drehtag 38) umgebaut werden"}, {"day": "29", "date": "2026-10-29", "weekday": "Do", "type": "dreh", "mainLocation": "Empore (4/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "30", "date": "2026-10-30", "weekday": "Fr", "type": "dreh", "mainLocation": "Empore (5/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": "Anschließend Umdressen Empore während der Mittagspause"}, {"day": "-", "date": "2026-10-31", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "48+11 Turnaround"}, {"day": "-", "date": "2026-11-01", "weekday": "So", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei"}, {"day": "31", "date": "2026-11-02", "weekday": "Mo", "type": "dreh", "mainLocation": "Empore (6/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": "Herbstferien Bayern 2.11.-6.11."}, {"day": "32", "date": "2026-11-03", "weekday": "Di", "type": "dreh", "mainLocation": "Empore (7/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "33", "date": "2026-11-04", "weekday": "Mi", "type": "dreh", "mainLocation": "TBC: MOC, Lilienthalallee 40, 80939 München / Hilton Hotel am Flughafen / PayBack Gebäude (Location noch nicht final bestätigt - 'Airport Beer Garden')", "additionalLocations": [], "note": ""}, {"day": "34", "date": "2026-11-05", "weekday": "Do", "type": "dreh", "mainLocation": "Villa Blofeld, Schäftlarnstr. 139, 81371 München", "additionalLocations": [], "note": "NYC/Office Arthur"}, {"day": "35", "date": "2026-11-06", "weekday": "Fr", "type": "dreh", "mainLocation": "Villa Blofeld, Schäftlarnstr. 139, 81371 München", "additionalLocations": [], "note": "Leicht versetzter Dreh"}, {"day": "-", "date": "2026-11-07", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Verkürztes Wochenende"}, {"day": "-", "date": "2026-11-08", "weekday": "So", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei"}, {"day": "36", "date": "2026-11-09", "weekday": "Mo", "type": "dreh", "mainLocation": "Fake Wiesn @ Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": ["Minimotivwechsel auf der Fake Wiesn -> Fake Oktoberfest, Location TBA"], "note": "Zu Beginn: Fahrt -> Motiv N.N. oder vor Grün in Penzing"}, {"day": "37", "date": "2026-11-10", "weekday": "Di", "type": "dreh", "mainLocation": "König Ludwig Box auf der Empore (8/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "38", "date": "2026-11-11", "weekday": "Mi", "type": "dreh", "mainLocation": "Empore (9/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "39", "date": "2026-11-12", "weekday": "Do", "type": "dreh", "mainLocation": "Empore (10/10) @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "40", "date": "2026-11-13", "weekday": "Fr", "type": "dreh", "mainLocation": "Röhre Funhouse + Umkleide @ Studio Penzing, Kauferinger Str., 86929 Penzing", "additionalLocations": [], "note": ""}, {"day": "-", "date": "2026-11-14", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "48+11 Turnaround"}, {"day": "-", "date": "2026-11-15", "weekday": "So", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei"}, {"day": "41", "date": "2026-11-16", "weekday": "Mo", "type": "dreh", "mainLocation": "Aicher Ambulanz, Theresienwiese, München", "additionalLocations": [], "note": "Nachtdreh (Wiesn-Lazarett)"}, {"day": "-", "date": "2026-11-17", "weekday": "Di", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei"}, {"day": "-", "date": "2026-11-18", "weekday": "Mi", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Anreise Regie + DoP // Vorbereitung"}, {"day": "-", "date": "2026-11-19", "weekday": "Do", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Anreise Team (Teilnehmer tba)"}, {"day": "42", "date": "2026-11-20", "weekday": "Fr", "type": "dreh", "mainLocation": "Villa Vida Blu, Costa Rica (Terrace Beach Villa)", "additionalLocations": ["Beach in Sant Elm, Costa Rica (Company Move nach Mittagspause)"], "note": "Auslandsdrehtag Costa Rica"}, {"day": "-", "date": "2026-11-21", "weekday": "Sa", "type": "dreh-frei", "mainLocation": "", "additionalLocations": [], "note": "Drehfrei. Noch zu disponieren: MUC-Etablierer (2nd Unit) und Plate Neuschwanstein."}];
+
+const state = {
+  view:'dashboard',
+  calMonth:new Date(2026,8,1),
+  suppliers:[], appointments:[], photos:[], drehplan:[],
+  settings:{...DEFAULT_SETTINGS},
+  loading:true,
+  activeSupplierId:null,
+  supplierSearch:'', apptFilter:'upcoming', apptSearch:'',
+  settingsOpen:false, settingsTab:'sync', _dbxPending:false,
+  dbx:{ accessToken:null, accessTokenExpires:0, syncStatus:'idle', lastSync:null, lastError:null, saveTimer:null, pkceVerifier:null },
+};
+
+async function loadAll(){
+  try{const r=await appStorage.get('settings');if(r?.value)state.settings={...DEFAULT_SETTINGS,...JSON.parse(r.value)};}catch(e){}
+  try{const r=await appStorage.get('suppliers');if(r?.value)state.suppliers=JSON.parse(r.value);}catch(e){state.suppliers=[];}
+  try{const r=await appStorage.get('appointments');if(r?.value)state.appointments=JSON.parse(r.value);}catch(e){state.appointments=[];}
+  try{const r=await appStorage.get('photos');if(r?.value)state.photos=JSON.parse(r.value);}catch(e){state.photos=[];}
+  try{const r=await appStorage.get('drehplan');if(r?.value)state.drehplan=JSON.parse(r.value);}catch(e){state.drehplan=[];}
+  // Erststart: Drehplan mit extrahierten Daten befüllen, falls noch leer
+  if(state.drehplan.length===0 && typeof SEED_DREHPLAN!=='undefined' && SEED_DREHPLAN.length){
+    state.drehplan=SEED_DREHPLAN.map(d=>({id:uid(),...d}));
+    await saveDrehplan();
+  }
+  try{
+    const r=await appStorage.get('_dbxAuthPending');
+    if(r?.value==='1'){
+      state._dbxPending=true; state.settingsOpen=true; state.settingsTab='sync';
+      await appStorage.delete('_dbxAuthPending');
+    }
+  }catch(e){}
+  state.loading=false;
+  if(dbxConnected()){
+    setTimeout(async ()=>{ await dbxLoadFromCloud(); render(); },150);
+  }
+}
+async function saveSuppliers(){try{await appStorage.set('suppliers',JSON.stringify(state.suppliers));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+async function saveAppointments(){try{await appStorage.set('appointments',JSON.stringify(state.appointments));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+async function savePhotos(){try{await appStorage.set('photos',JSON.stringify(state.photos));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+async function saveDrehplan(){try{await appStorage.set('drehplan',JSON.stringify(state.drehplan));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+async function saveSettings(){try{await appStorage.set('settings',JSON.stringify(state.settings));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+
+/* ============================================================
+   DROPBOX-SYNC
+   PKCE-Flow mit offline-Scope für Refresh-Tokens.
+   Kein Client-Secret, kein Redirect-URI-Setup nötig (Code wird
+   manuell zurückkopiert) — funktioniert daher rein statisch.
+   ============================================================ */
+const DBX_API = 'https://api.dropboxapi.com/2';
+const DBX_CONTENT = 'https://content.dropboxapi.com/2';
+const DBX_AUTH_URL = 'https://www.dropbox.com/oauth2/authorize';
+const DBX_TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token';
+
+function dbxRandomString(len=64){
+  const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const arr=new Uint8Array(len); crypto.getRandomValues(arr);
+  return Array.from(arr,b=>chars[b%chars.length]).join('');
+}
+async function dbxChallenge(verifier){
+  const enc=new TextEncoder().encode(verifier);
+  const hash=await crypto.subtle.digest('SHA-256',enc);
+  const bytes=new Uint8Array(hash);
+  let s=''; for(const b of bytes) s+=String.fromCharCode(b);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+async function dbxStartAuth(){
+  const appKey=state.settings.dbxAppKey?.trim();
+  if(!appKey){toast('Bitte App-Key eingeben');return;}
+  const win=window.open('about:blank','_blank');
+  try{
+    const verifier=dbxRandomString(64);
+    state.dbx.pkceVerifier=verifier;
+    await appStorage.set('_dbxPkceVerifier', verifier);
+    await appStorage.set('_dbxAuthPending', '1');
+    const challenge=await dbxChallenge(verifier);
+    const url=`${DBX_AUTH_URL}?client_id=${encodeURIComponent(appKey)}`
+      +`&response_type=code&code_challenge=${challenge}&code_challenge_method=S256`
+      +`&token_access_type=offline`;
+    if(win && !win.closed){
+      win.location.href=url;
+      toast('Dropbox in neuem Tab geöffnet. Danach Code hier einfügen.');
+    } else {
+      toast('Pop-ups blockiert – öffne Dropbox im gleichen Tab…');
+      setTimeout(()=>{window.location.href=url;},900);
+    }
+  }catch(e){
+    if(win && !win.closed) win.close();
+    toast('Fehler beim Vorbereiten: '+e.message);
+  }
+}
+
+async function dbxFinishAuth(code){
+  if(!code){toast('Bitte Autorisierungs-Code einfügen');return;}
+  const appKey=state.settings.dbxAppKey?.trim();
+  let verifier=state.dbx.pkceVerifier;
+  if(!verifier){ try{ const r=await appStorage.get('_dbxPkceVerifier'); if(r?.value) verifier=r.value; }catch(e){} }
+  if(!verifier){toast('PKCE-Verifier verloren – bitte neu starten');return;}
+  const body=new URLSearchParams({ code:code.trim(), grant_type:'authorization_code', client_id:appKey, code_verifier:verifier });
+  try{
+    const res=await fetch(DBX_TOKEN_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+    if(!res.ok){const t=await res.text();throw new Error('Token-Tausch fehlgeschlagen: '+t);}
+    const data=await res.json();
+    if(!data.refresh_token) throw new Error('Kein Refresh-Token erhalten – App im "offline"-Modus registriert?');
+    state.settings.dbxRefreshToken=data.refresh_token;
+    state.dbx.accessToken=data.access_token;
+    state.dbx.accessTokenExpires=Date.now()+(data.expires_in||14400)*1000-60000;
+    await saveSettings();
+    try{ await appStorage.delete('_dbxPkceVerifier'); }catch(e){}
+    state.dbx.pkceVerifier=null; state._dbxPending=false;
+    toast('Dropbox verbunden! Lade Daten …');
+    const loaded=await dbxLoadFromCloud();
+    if(!loaded) await dbxSaveToCloud(true);
+    render();
+  }catch(e){toast('Fehler: '+e.message);}
+}
+
+async function dbxGetAccessToken(){
+  const now=Date.now();
+  if(state.dbx.accessToken && state.dbx.accessTokenExpires>now) return state.dbx.accessToken;
+  const appKey=state.settings.dbxAppKey?.trim();
+  const rt=state.settings.dbxRefreshToken;
+  if(!appKey||!rt) throw new Error('Nicht mit Dropbox verbunden');
+  const body=new URLSearchParams({grant_type:'refresh_token',refresh_token:rt,client_id:appKey});
+  const res=await fetch(DBX_TOKEN_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+  if(!res.ok){const t=await res.text();throw new Error('Refresh fehlgeschlagen: '+t);}
+  const data=await res.json();
+  state.dbx.accessToken=data.access_token;
+  state.dbx.accessTokenExpires=now+(data.expires_in||14400)*1000-60000;
+  return state.dbx.accessToken;
+}
+function dbxConnected(){ return !!(state.settings.dbxAppKey && state.settings.dbxRefreshToken); }
+
+function dbxBuildPayload(){
+  return {
+    format:'sep_zulieferer_sync_v1', savedAt:new Date().toISOString(),
+    device:navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Mac')?'Mac':navigator.userAgent.includes('Android')?'Android':'Browser',
+    suppliers:state.suppliers, appointments:state.appointments, photos:state.photos, drehplan:state.drehplan,
+  };
+}
+async function dbxSaveToCloud(force=false){
+  if(!dbxConnected()) return false;
+  if(state.dbx.syncStatus==='saving'&&!force) return false;
+  state.dbx.syncStatus='saving'; state.dbx.lastError=null; updateSyncIndicator();
+  try{
+    const token=await dbxGetAccessToken();
+    const payload=dbxBuildPayload();
+    const body=new Blob([JSON.stringify(payload)],{type:'application/octet-stream'});
+    const apiArg={path:state.settings.dbxPath||'/september-zulieferer-daten.json',mode:'overwrite',mute:true,autorename:false};
+    const res=await fetch(`${DBX_CONTENT}/files/upload`,{method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/octet-stream','Dropbox-API-Arg':JSON.stringify(apiArg)}, body});
+    if(!res.ok){const t=await res.text();throw new Error('Upload: '+t);}
+    state.dbx.lastSync=new Date().toISOString(); state.dbx.syncStatus='idle'; updateSyncIndicator();
+    return true;
+  }catch(e){ state.dbx.syncStatus='error'; state.dbx.lastError=e.message; updateSyncIndicator(); return false; }
+}
+async function dbxLoadFromCloud(){
+  if(!dbxConnected()) return false;
+  state.dbx.syncStatus='loading'; state.dbx.lastError=null; updateSyncIndicator();
+  try{
+    const token=await dbxGetAccessToken();
+    const apiArg={path:state.settings.dbxPath||'/september-zulieferer-daten.json'};
+    const res=await fetch(`${DBX_CONTENT}/files/download`,{method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Dropbox-API-Arg':JSON.stringify(apiArg)}});
+    if(res.status===409){ state.dbx.syncStatus='idle'; updateSyncIndicator(); return false; }
+    if(!res.ok){const t=await res.text();throw new Error('Download: '+t);}
+    const data=JSON.parse(await res.text());
+    if(data.format!=='sep_zulieferer_sync_v1') throw new Error('Ungültiges Sync-Format');
+    if(Array.isArray(data.suppliers)) state.suppliers=data.suppliers;
+    if(Array.isArray(data.appointments)) state.appointments=data.appointments;
+    if(Array.isArray(data.photos)) state.photos=data.photos;
+    if(Array.isArray(data.drehplan)) state.drehplan=data.drehplan;
+    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan();
+    state.dbx.lastSync=new Date().toISOString(); state.dbx.syncStatus='idle'; updateSyncIndicator();
+    return true;
+  }catch(e){ state.dbx.syncStatus='error'; state.dbx.lastError=e.message; updateSyncIndicator(); return false; }
+}
+function dbxTriggerSave(){
+  if(!dbxConnected()||!state.settings.dbxAutoSync) return;
+  if(state.dbx.saveTimer) clearTimeout(state.dbx.saveTimer);
+  state.dbx.saveTimer=setTimeout(()=>{dbxSaveToCloud();},1500);
+}
+async function dbxDisconnect(){
+  if(!confirm('Dropbox-Verbindung trennen? Deine Daten bleiben lokal und in Dropbox erhalten.'))return;
+  state.settings.dbxRefreshToken=''; state.dbx.accessToken=null; state.dbx.accessTokenExpires=0;
+  state.dbx.lastSync=null; state.dbx.syncStatus='idle';
+  await saveSettings(); toast('Dropbox getrennt'); renderSettingsModal();
+}
+function updateSyncIndicator(){
+  const el=document.getElementById('sync-indicator'); if(!el) return;
+  const s=state.dbx.syncStatus;
+  if(!dbxConnected()){ el.className=''; el.innerHTML=''; return; }
+  if(s==='saving'||s==='loading'){ el.className=''; el.innerHTML=ic('sync')+' '+(s==='saving'?'Speichert…':'Lädt…'); return; }
+  if(s==='error'){ el.className='err'; el.innerHTML=ic('sync')+' Sync-Fehler'; el.title=state.dbx.lastError||''; return; }
+  el.className='ok'; el.innerHTML=ic('check')+' Synchron';
+}
+
+/* --- Foto-Binärdateien: Upload/Download zu Dropbox --- */
+async function dbxUploadBinary(path,blob){
+  const token=await dbxGetAccessToken();
+  const apiArg={path,mode:'overwrite',mute:true,autorename:false};
+  const res=await fetch(`${DBX_CONTENT}/files/upload`,{method:'POST',
+    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/octet-stream','Dropbox-API-Arg':JSON.stringify(apiArg)}, body:blob});
+  if(!res.ok){const t=await res.text();throw new Error('Foto-Upload: '+t);}
+  return true;
+}
+async function dbxDownloadBinary(path){
+  const token=await dbxGetAccessToken();
+  const apiArg={path};
+  const res=await fetch(`${DBX_CONTENT}/files/download`,{method:'POST',
+    headers:{'Authorization':'Bearer '+token,'Dropbox-API-Arg':JSON.stringify(apiArg)}});
+  if(!res.ok){const t=await res.text();throw new Error('Foto-Download: '+t);}
+  return await res.blob();
+}
+
+/* ---------------------------- Fotos ---------------------------- */
+function compressImage(file,maxDim,quality){
+  return new Promise((resolve,reject)=>{
+    const img=new Image(); const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      let {width,height}=img;
+      if(width>maxDim||height>maxDim){
+        if(width>height){height=Math.round(height*maxDim/width);width=maxDim;}
+        else{width=Math.round(width*maxDim/height);height=maxDim;}
+      }
+      const c=document.createElement('canvas'); c.width=width; c.height=height;
+      const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,width,height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b=>b?resolve(b):reject(new Error('Komprimierung fehlgeschlagen')),'image/jpeg',quality);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Bild konnte nicht gelesen werden'));};
+    img.src=url;
+  });
+}
+function blobToBase64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(blob);});}
+function base64ToBlob(dataURL){
+  const [head,b64]=dataURL.split(',');
+  const mime=/data:(.*?);/.exec(head)?.[1]||'image/jpeg';
+  const bin=atob(b64); const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+
+async function addPhotosToSupplier(files,supplierId,appointmentId){
+  let n=0;
+  for(const file of files){
+    if(!file.type.startsWith('image/')) continue;
+    try{
+      const fullBlob=await compressImage(file,1600,0.82);
+      const thumbBlob=await compressImage(file,320,0.68);
+      const thumbDataURL=await blobToBase64(thumbBlob);
+      const id=uid();
+      const ext='jpg';
+      await appStorage.set('photoblob:'+id, await blobToBase64(fullBlob));
+      const photo={id,supplierId,appointmentId:appointmentId||null,caption:'',thumb:thumbDataURL,mime:'image/jpeg',uploadedAt:new Date().toISOString(),dropboxPath:null};
+      state.photos.push(photo);
+      n++;
+      if(dbxConnected()){
+        const path=(state.settings.dbxPhotosFolder||'/fotos')+'/'+id+'.'+ext;
+        dbxUploadBinary(path,fullBlob).then(()=>{ photo.dropboxPath=path; savePhotos(); updateSyncIndicator(); })
+          .catch(err=>{ console.warn('Foto-Sync fehlgeschlagen',err); });
+      }
+    }catch(e){ console.warn('Foto übersprungen',e); }
+  }
+  if(n) await savePhotos();
+  return n;
+}
+async function deletePhoto(id){
+  const p=state.photos.find(x=>x.id===id); if(!p) return;
+  if(!confirm('Dieses Foto wirklich löschen?')) return;
+  state.photos=state.photos.filter(x=>x.id!==id);
+  await appStorage.delete('photoblob:'+id).catch(()=>{});
+  await savePhotos();
+  if(dbxConnected() && p.dropboxPath){
+    dbxGetAccessToken().then(token=>fetch(`${DBX_API}/files/delete_v2`,{method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({path:p.dropboxPath})})).catch(()=>{});
+  }
+  render();
+}
+async function getPhotoFullSrc(photo){
+  try{ const r=await appStorage.get('photoblob:'+photo.id); if(r?.value) return r.value; }catch(e){}
+  if(photo.dropboxPath && dbxConnected()){
+    try{
+      const blob=await dbxDownloadBinary(photo.dropboxPath);
+      const dataURL=await blobToBase64(blob);
+      await appStorage.set('photoblob:'+photo.id, dataURL);
+      return dataURL;
+    }catch(e){ console.warn('Foto-Download fehlgeschlagen',e); }
+  }
+  return photo.thumb;
+}
+
+/* ---------------------------- ICS-Kalenderexport ---------------------------- */
+function icsEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');}
+function icsDateAllDay(iso){return iso.replace(/-/g,'');}
+function icsDateTime(iso,time){
+  const t=(time||'09:00').replace(':','')+'00';
+  return iso.replace(/-/g,'')+'T'+t;
+}
+function buildICS(events){
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//September Zulieferer Tool//DE','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  const stamp=new Date().toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+  for(const ev of events){
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:'+ev.uid);
+    lines.push('DTSTAMP:'+stamp);
+    if(ev.allDay){
+      lines.push('DTSTART;VALUE=DATE:'+icsDateAllDay(ev.date));
+      lines.push('DTEND;VALUE=DATE:'+icsDateAllDay(ev.endDate||ev.date));
+    }else{
+      lines.push('DTSTART:'+icsDateTime(ev.date,ev.startTime));
+      lines.push('DTEND:'+icsDateTime(ev.date,ev.endTime||addHour(ev.startTime)));
+    }
+    lines.push('SUMMARY:'+icsEscape(ev.title));
+    if(ev.location) lines.push('LOCATION:'+icsEscape(ev.location));
+    if(ev.description) lines.push('DESCRIPTION:'+icsEscape(ev.description));
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+function addHour(time){
+  const [h,m]=(time||'09:00').split(':').map(Number);
+  const d=new Date(2000,0,1,h,m); d.setHours(d.getHours()+1);
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function apptToICSEvent(a){
+  const supplier=state.suppliers.find(s=>s.id===a.supplierId);
+  const descParts=[];
+  if(a.notes) descParts.push(a.notes);
+  if(supplier){
+    descParts.push('Zulieferer: '+supplier.name);
+    if(supplier.contactPerson) descParts.push('Kontakt: '+supplier.contactPerson);
+    if(supplier.phone) descParts.push('Tel: '+supplier.phone);
+    if(supplier.email) descParts.push('E-Mail: '+supplier.email);
+  }
+  return {
+    uid:'appt-'+a.id+'@september-zulieferer',
+    title:(supplier?supplier.name+' – ':'')+a.title,
+    date:a.date, startTime:a.startTime, endTime:a.endTime,
+    allDay:!a.startTime,
+    location:a.location||(supplier?supplier.address:'')||'',
+    description:descParts.join('\n'),
+  };
+}
+function dpToICSEvent(d){
+  const locs=[d.mainLocation,...(d.additionalLocations||[])].filter(Boolean);
+  const label=d.type==='dreh-frei'?'Drehfrei':(d.type==='2nd-unit'?'2nd Unit':d.type==='3rd-unit'?'3rd Unit':'Drehtag');
+  return {
+    uid:'dp-'+d.id+'@september-zulieferer',
+    title:(d.day?label+' '+d.day:label)+(d.mainLocation?': '+d.mainLocation:''),
+    date:d.date, allDay:true,
+    location:d.mainLocation||'',
+    description:[d.additionalLocations?.length?('Motivwechsel: '+d.additionalLocations.join(' / ')):'',d.note||''].filter(Boolean).join('\n'),
+  };
+}
+function exportAppointmentICS(id){
+  const a=state.appointments.find(x=>x.id===id); if(!a) return;
+  const ics=buildICS([apptToICSEvent(a)]);
+  downloadFile('termin-'+(a.title||'termin').toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.ics',ics,'text/calendar');
+}
+function exportAllAppointmentsICS(){
+  if(!state.appointments.length){toast('Keine Termine vorhanden');return;}
+  const ics=buildICS(state.appointments.map(apptToICSEvent));
+  downloadFile('zulieferer-termine.ics',ics,'text/calendar');
+}
+function exportDrehplanICS(){
+  if(!state.drehplan.length){toast('Kein Drehplan vorhanden');return;}
+  const ics=buildICS(state.drehplan.filter(d=>d.date).map(dpToICSEvent));
+  downloadFile('drehplan.ics',ics,'text/calendar');
+}
+function exportEverythingICS(){
+  const events=[...state.drehplan.filter(d=>d.date).map(dpToICSEvent),...state.appointments.map(apptToICSEvent)];
+  if(!events.length){toast('Keine Daten zum Exportieren');return;}
+  downloadFile('september-kalender.ics',buildICS(events),'text/calendar');
+}
+function exportSupplierAppointmentsICS(supplierId){
+  const s=state.suppliers.find(x=>x.id===supplierId);
+  const list=state.appointments.filter(a=>a.supplierId===supplierId);
+  if(!list.length){toast('Keine Termine vorhanden');return;}
+  downloadFile('termine-'+(s?.name||'zulieferer').toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.ics',buildICS(list.map(apptToICSEvent)),'text/calendar');
+}
+
+/* ---------------------------- Navigation / Render ---------------------------- */
+const TABS = [
+  {key:'dashboard', label:'Übersicht', icon:'home'},
+  {key:'suppliers', label:'Zulieferer', icon:'users'},
+  {key:'appointments', label:'Termine', icon:'calendar'},
+  {key:'drehplan', label:'Drehplan', icon:'list'},
+];
+function setView(key){
+  state.view=key;
+  if(key!=='supplier-detail') state.activeSupplierId=null;
+  render();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function openSupplierDetail(id){
+  state.activeSupplierId=id; state.view='supplier-detail'; render();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function render(){
+  renderTabsBar();
+  updateSyncIndicator();
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const map={dashboard:'view-dashboard',suppliers:'view-suppliers','supplier-detail':'view-supplier-detail',appointments:'view-appointments',drehplan:'view-drehplan'};
+  const id=map[state.view]||'view-dashboard';
+  document.getElementById(id).classList.add('active');
+  if(state.view==='dashboard') renderDashboard();
+  else if(state.view==='suppliers') renderSuppliers();
+  else if(state.view==='supplier-detail') renderSupplierDetail();
+  else if(state.view==='appointments') renderAppointments();
+  else if(state.view==='drehplan') renderDrehplan();
+}
+function renderTabsBar(){
+  const el=document.getElementById('tabs');
+  el.innerHTML=TABS.map(t=>{
+    const active=state.view===t.key||(t.key==='suppliers'&&state.view==='supplier-detail');
+    return `<button class="${active?'active':''}" data-action="set-view" data-view="${t.key}">${ic(t.icon)}${t.label}</button>`;
+  }).join('');
+}
+
+/* ---------------------------- Dashboard / Kalender ---------------------------- */
+function drehplanForDate(iso){ return state.drehplan.filter(d=>d.date===iso); }
+function appointmentsForDate(iso){ return state.appointments.filter(a=>a.date===iso).sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||'')); }
+function apptSupplierName(a){ const s=state.suppliers.find(x=>x.id===a.supplierId); return (s?s.name+': ':'')+a.title; }
+function dpPillClass(type){ return type==='dreh-frei'?'frei':(type&&type.includes('unit'))?'unit':'dreh'; }
+
+function renderDashboard(){
+  const el=document.getElementById('view-dashboard');
+  const t=todayISO();
+  const upcoming=state.appointments.filter(a=>a.date>=t).sort((a,b)=>a.date.localeCompare(b.date)||(a.startTime||'').localeCompare(b.startTime||'')).slice(0,5);
+  el.innerHTML=`
+    <div class="kpi-row">
+      <div class="kpi"><div class="n">${state.suppliers.length}</div><div class="l">Zulieferer</div></div>
+      <div class="kpi"><div class="n">${state.appointments.filter(a=>a.date>=t).length}</div><div class="l">Anstehende Termine</div></div>
+      <div class="kpi"><div class="n">${state.photos.length}</div><div class="l">Fotos</div></div>
+      <div class="kpi"><div class="n">${state.drehplan.filter(d=>d.type!=='dreh-frei').length}</div><div class="l">Drehtage geplant</div></div>
+    </div>
+    <div class="card pad" style="margin-bottom:16px">
+      <div class="cal-head">
+        <button class="iconbtn" data-action="cal-prev">${ic('chevL')}</button>
+        <h2>${state.calMonth.toLocaleDateString('de-DE',{month:'long',year:'numeric'})}</h2>
+        <div class="row" style="gap:6px">
+          <button class="btn btn-sm" data-action="cal-today">Heute</button>
+          <button class="iconbtn" data-action="cal-next">${ic('chevR')}</button>
+        </div>
+      </div>
+      ${renderCalGrid()}
+    </div>
+    <div class="row between" style="margin-bottom:8px"><h3 style="font-size:15px">Nächste Termine</h3><button class="btn btn-sm" data-action="set-view" data-view="appointments">Alle ansehen</button></div>
+    ${upcoming.length? `<div class="appt-list">${upcoming.map(a=>renderApptItem(a)).join('')}</div>` : `<div class="empty">${ic('calendar')}<div>Noch keine anstehenden Termine</div></div>`}
+  `;
+}
+function renderCalGrid(){
+  const first=new Date(state.calMonth.getFullYear(),state.calMonth.getMonth(),1);
+  const startOffset=(first.getDay()+6)%7;
+  const gridStart=new Date(first); gridStart.setDate(1-startOffset);
+  const today=todayISO();
+  const DOW=['Mo','Di','Mi','Do','Fr','Sa','So'];
+  let cells=DOW.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  for(let i=0;i<42;i++){
+    const d=new Date(gridStart); d.setDate(gridStart.getDate()+i);
+    const iso=dateToISO(d);
+    const inMonth=d.getMonth()===state.calMonth.getMonth();
+    const dp=drehplanForDate(iso);
+    const appts=appointmentsForDate(iso);
+    const shootEntries=dp.filter(x=>x.type!=='dreh-frei');
+    const freeEntry=dp.find(x=>x.type==='dreh-frei');
+    let locHtml='';
+    if(shootEntries.length){
+      const label=shootEntries.map(x=>(x.day&&x.day!=='-'?('DT '+x.day+': '):'')+(x.mainLocation||dpTypeLabel(x.type))).join(' · ');
+      locHtml=`<div class="dloc" title="${escapeAttr(label)}">${escapeHtml(label)}</div>`;
+    } else if(freeEntry){
+      locHtml=`<div class="dfrei">Drehfrei</div>`;
+    }
+    const apptHtml=appts.slice(0,2).map(a=>`<div class="dappt">${escapeHtml((a.startTime?a.startTime+' ':'')+apptSupplierName(a))}</div>`).join('');
+    const moreHtml=appts.length>2?`<div class="dmore">+${appts.length-2} mehr</div>`:'';
+    cells+=`<div class="cal-day${inMonth?'':' out'}${iso===today?' today':''}" data-action="open-day" data-date="${iso}">
+      <div class="dnum">${d.getDate()}</div>${locHtml}${apptHtml}${moreHtml}
+    </div>`;
+  }
+  return `<div class="cal-grid">${cells}</div>`;
+}
+function renderApptItem(a){
+  const s=state.suppliers.find(x=>x.id===a.supplierId);
+  return `<div class="appt-item">
+    <div class="adate">${fmtDate(a.date,{day:'2-digit',month:'2-digit'})}</div>
+    <div class="abody">
+      <div class="atitle">${escapeHtml(a.title)}${s?' · '+escapeHtml(s.name):''}</div>
+      <div class="asub">${a.startTime?a.startTime+(a.endTime?'–'+a.endTime:'')+' · ':''}${escapeHtml(a.location||'')}</div>
+    </div>
+    <span class="pill status-${a.status}">${(APPT_STATUS.find(x=>x.v===a.status)||{}).l||a.status}</span>
+    <div class="appt-actions">
+      <button class="iconbtn btn-sm" data-action="edit-appt" data-id="${a.id}" title="Bearbeiten">${ic('edit')}</button>
+      <button class="iconbtn btn-sm" data-action="ics-appt" data-id="${a.id}" title="Kalender-Export">${ic('download')}</button>
+      <button class="iconbtn btn-sm" data-action="del-appt" data-id="${a.id}" title="Löschen">${ic('trash')}</button>
+    </div>
+  </div>`;
+}
+
+/* ---------------------------- Zulieferer ---------------------------- */
+function renderSuppliers(){
+  const el=document.getElementById('view-suppliers');
+  el.innerHTML=`
+    <div class="row between" style="margin-bottom:14px">
+      <h2 style="font-size:19px">Zulieferer</h2>
+      <button class="btn btn-primary" data-action="new-supplier">${ic('plus')} Neuer Zulieferer</button>
+    </div>
+    <div class="search-bar" style="margin-bottom:14px;max-width:360px">${ic('search')}<input id="supplier-search" placeholder="Suchen…" value="${escapeAttr(state.supplierSearch)}"></div>
+    <div id="supplier-results"></div>
+  `;
+  updateSupplierResults();
+  document.getElementById('supplier-search').addEventListener('input',e=>{ state.supplierSearch=e.target.value; updateSupplierResults(); });
+}
+function updateSupplierResults(){
+  const q=state.supplierSearch.trim().toLowerCase();
+  const list=state.suppliers.filter(s=>!q || [s.name,s.category,s.contactPerson,s.notes].filter(Boolean).some(x=>x.toLowerCase().includes(q)))
+    .sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  document.getElementById('supplier-results').innerHTML = list.length
+    ? `<div class="supplier-grid">${list.map(renderSupplierCard).join('')}</div>`
+    : `<div class="empty">${ic('users')}<div>${q?'Keine Treffer':'Noch keine Zulieferer erfasst'}</div></div>`;
+}
+function renderSupplierCard(s){
+  const apptCount=state.appointments.filter(a=>a.supplierId===s.id).length;
+  const photoCount=state.photos.filter(p=>p.supplierId===s.id).length;
+  return `<div class="supplier-card" data-action="open-supplier" data-id="${s.id}">
+    <div class="sname">${escapeHtml(s.name)}</div>
+    ${s.category?`<div class="scat">${escapeHtml(s.category)}</div>`:''}
+    <div class="smeta">
+      ${s.contactPerson?`<span>${escapeHtml(s.contactPerson)}</span>`:''}
+      ${s.phone?`<span>${escapeHtml(s.phone)}</span>`:''}
+      ${s.email?`<span>${escapeHtml(s.email)}</span>`:''}
+    </div>
+    <div class="sfoot"><span>${apptCount} Termin${apptCount===1?'':'e'}</span><span>·</span><span>${photoCount} Foto${photoCount===1?'':'s'}</span></div>
+  </div>`;
+}
+function renderSupplierDetail(){
+  const el=document.getElementById('view-supplier-detail');
+  const s=state.suppliers.find(x=>x.id===state.activeSupplierId);
+  if(!s){ el.innerHTML=`<div class="empty">Zulieferer nicht gefunden</div>`; return; }
+  const appts=state.appointments.filter(a=>a.supplierId===s.id).sort((a,b)=>a.date.localeCompare(b.date));
+  const photos=state.photos.filter(p=>p.supplierId===s.id).sort((a,b)=>(b.uploadedAt||'').localeCompare(a.uploadedAt||''));
+  el.innerHTML=`
+    <button class="btn btn-ghost btn-sm" data-action="set-view" data-view="suppliers" style="margin-bottom:10px">${ic('back')} Zurück</button>
+    <div class="card pad">
+      <div class="detail-head">
+        <div>
+          <h2 style="font-size:20px">${escapeHtml(s.name)}</h2>
+          ${s.category?`<div class="scat" style="margin-top:2px">${escapeHtml(s.category)}</div>`:''}
+        </div>
+        <div class="row" style="gap:6px">
+          <button class="iconbtn" data-action="edit-supplier" data-id="${s.id}" title="Bearbeiten">${ic('edit')}</button>
+          <button class="iconbtn btn-danger" data-action="del-supplier" data-id="${s.id}" title="Löschen">${ic('trash')}</button>
+        </div>
+      </div>
+      <div class="contact-grid">
+        ${s.contactPerson?`<div class="ci">${ic('users')}<span>${escapeHtml(s.contactPerson)}</span></div>`:''}
+        ${s.phone?`<div class="ci">${ic('phone')}<a href="tel:${escapeAttr(s.phone.replace(/\s+/g,''))}">${escapeHtml(s.phone)}</a></div>`:''}
+        ${s.email?`<div class="ci">${ic('mail')}<a href="mailto:${escapeAttr(s.email)}">${escapeHtml(s.email)}</a></div>`:''}
+        ${s.address?`<div class="ci">${ic('pin')}<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.address)}" target="_blank" rel="noopener">${escapeHtml(s.address)}</a></div>`:''}
+        ${s.website?`<div class="ci">${ic('link')}<a href="${escapeAttr(/^https?:/.test(s.website)?s.website:'https://'+s.website)}" target="_blank" rel="noopener">${escapeHtml(s.website)}</a></div>`:''}
+      </div>
+      ${s.notes?`<div class="divider">Notizen / Vereinbarungen</div><div style="white-space:pre-wrap;font-size:13px">${escapeHtml(s.notes)}</div>`:''}
+    </div>
+
+    <div class="row between" style="margin:18px 0 8px"><h3 style="font-size:15px">Termine</h3>
+      <div class="row" style="gap:6px">
+        ${appts.length?`<button class="btn btn-sm" data-action="ics-supplier-appts" data-id="${s.id}">${ic('download')} Alle exportieren</button>`:''}
+        <button class="btn btn-sm btn-primary" data-action="new-appt" data-supplier="${s.id}">${ic('plus')} Termin</button>
+      </div>
+    </div>
+    ${appts.length? `<div class="appt-list">${appts.map(a=>renderApptItem(a)).join('')}</div>` : `<div class="empty" style="padding:20px">Noch keine Termine</div>`}
+
+    <div class="row between" style="margin:18px 0 8px"><h3 style="font-size:15px">Fotos (gelieferte Produkte)</h3></div>
+    <div class="drop-zone" id="photo-drop" style="margin-bottom:10px">
+      ${ic('camera')}<div style="margin-top:6px;font-size:12.5px">Fotos hierher ziehen oder klicken zum Hochladen</div>
+      <input type="file" id="photo-file" accept="image/*" multiple style="display:none">
+    </div>
+    ${photos.length? `<div class="photo-grid">${photos.map(renderPhotoThumb).join('')}</div>` : `<div class="empty" style="padding:20px">Noch keine Fotos</div>`}
+  `;
+  bindSupplierDetailEvents(s.id);
+}
+function renderPhotoThumb(p){
+  return `<div class="photo-thumb" data-action="open-photo" data-id="${p.id}">
+    <img src="${p.thumb}" loading="lazy">
+    ${p.caption?`<div class="pcap">${escapeHtml(p.caption)}</div>`:''}
+    <button class="pdel" data-action="del-photo" data-id="${p.id}" title="Löschen">${ic('close')}</button>
+  </div>`;
+}
+function bindSupplierDetailEvents(supplierId){
+  const zone=document.getElementById('photo-drop');
+  const input=document.getElementById('photo-file');
+  if(!zone) return;
+  zone.addEventListener('click',()=>input.click());
+  input.addEventListener('change',async e=>{
+    const files=Array.from(e.target.files);
+    if(files.length){ const n=await addPhotosToSupplier(files,supplierId,null); toast(n+' Foto(s) hinzugefügt'); render(); }
+    input.value='';
+  });
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+  zone.addEventListener('drop',async e=>{
+    e.preventDefault(); zone.classList.remove('drag');
+    const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
+    if(files.length){ const n=await addPhotosToSupplier(files,supplierId,null); toast(n+' Foto(s) hinzugefügt'); render(); }
+  });
+}
+
+/* ---------------------------- Termine (alle) ---------------------------- */
+function renderAppointments(){
+  const el=document.getElementById('view-appointments');
+  el.innerHTML=`
+    <div class="row between" style="margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <h2 style="font-size:19px">Termine</h2>
+      <div class="row" style="gap:8px">
+        <button class="btn btn-sm" data-action="ics-all-appts">${ic('download')} Alle exportieren</button>
+        <button class="btn btn-primary btn-sm" data-action="new-appt">${ic('plus')} Neuer Termin</button>
+      </div>
+    </div>
+    <div class="row" style="gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="search-bar" style="max-width:320px">${ic('search')}<input id="appt-search" placeholder="Suchen…" value="${escapeAttr(state.apptSearch)}"></div>
+      <select id="appt-filter" style="border:1px solid var(--line-strong);background:var(--bg-card);border-radius:9px;padding:8px 10px;font:inherit">
+        <option value="upcoming" ${state.apptFilter==='upcoming'?'selected':''}>Anstehend</option>
+        <option value="past" ${state.apptFilter==='past'?'selected':''}>Vergangen</option>
+        <option value="all" ${state.apptFilter==='all'?'selected':''}>Alle</option>
+      </select>
+    </div>
+    <div id="appt-results"></div>
+  `;
+  updateApptResults();
+  document.getElementById('appt-search').addEventListener('input',e=>{ state.apptSearch=e.target.value; updateApptResults(); });
+  document.getElementById('appt-filter').addEventListener('change',e=>{ state.apptFilter=e.target.value; updateApptResults(); });
+}
+function updateApptResults(){
+  const q=state.apptSearch.trim().toLowerCase();
+  const t=todayISO();
+  let list=state.appointments.slice();
+  if(state.apptFilter==='upcoming') list=list.filter(a=>a.date>=t);
+  else if(state.apptFilter==='past') list=list.filter(a=>a.date<t);
+  if(q) list=list.filter(a=>{ const s=state.suppliers.find(x=>x.id===a.supplierId); return [a.title,a.location,a.notes,s?.name].filter(Boolean).some(x=>x.toLowerCase().includes(q)); });
+  list.sort((a,b)=>a.date.localeCompare(b.date)||(a.startTime||'').localeCompare(b.startTime||''));
+  document.getElementById('appt-results').innerHTML = list.length
+    ? `<div class="appt-list">${list.map(a=>renderApptItem(a)).join('')}</div>`
+    : `<div class="empty">${ic('calendar')}<div>Keine Termine gefunden</div></div>`;
+}
+
+/* ---------------------------- Drehplan ---------------------------- */
+function renderDrehplan(){
+  const el=document.getElementById('view-drehplan');
+  const rows=state.drehplan.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  el.innerHTML=`
+    <div class="row between" style="margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <h2 style="font-size:19px">Drehplan</h2>
+      <div class="row" style="gap:8px">
+        <button class="btn btn-sm" data-action="ics-drehplan">${ic('download')} Als Kalender exportieren</button>
+        <button class="btn btn-primary btn-sm" data-action="add-dp-row">${ic('plus')} Zeile hinzufügen</button>
+      </div>
+    </div>
+    <div class="info-box" style="margin-bottom:12px">Aus dem Drehplan-PDF (Stand 04.09.2026) importiert. Änderungen am echten Drehplan hier nachtragen — die Kalender-Übersicht auf „Übersicht" aktualisiert sich automatisch.</div>
+    <div class="card"><div class="dp-wrap"><table class="dp-table" id="dp-table">
+      <thead><tr><th>Tag</th><th>Datum</th><th>Wochentag</th><th>Typ</th><th>Hauptmotiv / Drehort</th><th>Zusatzmotive (bei Motivwechsel, mit „/" trennen)</th><th>Notiz</th><th></th></tr></thead>
+      <tbody>${rows.map(renderDpRow).join('')}</tbody>
+    </table></div></div>
+  `;
+  bindDrehplanEvents();
+}
+function renderDpRow(d){
+  return `<tr data-id="${d.id}">
+    <td><input data-field="day" value="${escapeAttr(d.day||'')}" style="width:70px"></td>
+    <td><input data-field="date" type="date" value="${escapeAttr(d.date||'')}" style="width:138px"></td>
+    <td><input data-field="weekday" value="${escapeAttr(d.weekday||'')}" style="width:50px"></td>
+    <td><select data-field="type">${DP_TYPES.map(ty=>`<option value="${ty.v}" ${d.type===ty.v?'selected':''}>${ty.l}</option>`).join('')}</select></td>
+    <td><input data-field="mainLocation" value="${escapeAttr(d.mainLocation||'')}" style="min-width:200px"></td>
+    <td><input data-field="additionalLocations" value="${escapeAttr((d.additionalLocations||[]).join(' / '))}" style="min-width:160px"></td>
+    <td><input data-field="note" value="${escapeAttr(d.note||'')}" style="min-width:160px"></td>
+    <td class="dp-actions"><button class="iconbtn btn-sm btn-danger" data-action="del-dp-row" data-id="${d.id}" title="Zeile löschen">${ic('trash')}</button></td>
+  </tr>`;
+}
+function bindDrehplanEvents(){
+  const table=document.getElementById('dp-table'); if(!table) return;
+  table.querySelectorAll('tr[data-id]').forEach(tr=>{
+    const id=tr.dataset.id;
+    tr.querySelectorAll('[data-field]').forEach(inp=>{
+      const evt=inp.tagName==='SELECT'?'change':'input';
+      inp.addEventListener(evt,()=>{
+        const row=state.drehplan.find(x=>x.id===id); if(!row) return;
+        const field=inp.dataset.field;
+        if(field==='additionalLocations') row[field]=inp.value.split('/').map(s=>s.trim()).filter(Boolean);
+        else row[field]=inp.value;
+        debouncedSaveDrehplan();
+      });
+    });
+  });
+}
+const debouncedSaveDrehplan=debounce(()=>saveDrehplan(),700);
+function addDrehplanRow(dateOverride){
+  const row={id:uid(),day:'',date:dateOverride||todayISO(),weekday:'',type:'dreh',mainLocation:'',additionalLocations:[],note:''};
+  state.drehplan.push(row); saveDrehplan(); render();
+}
+function deleteDrehplanRow(id){
+  if(!confirm('Diese Drehplan-Zeile löschen?')) return;
+  state.drehplan=state.drehplan.filter(x=>x.id!==id); saveDrehplan(); render();
+}
+
+/* ---------------------------- Modals ---------------------------- */
+function openModal(html){
+  document.getElementById('modal-root').innerHTML=`<div class="modal-bg" data-action="modal-bg-close"><div class="modal" data-action="noop">${html}</div></div>`;
+}
+function closeModal(){ document.getElementById('modal-root').innerHTML=''; state.settingsOpen=false; }
+
+function openSettings(tab){
+  state.settingsOpen=true; state.settingsTab=tab||state.settingsTab||'sync';
+  renderSettingsModal();
+}
+function renderSettingsModal(){
+  if(!state.settingsOpen) return;
+  openModal(`
+    <div class="modal-head"><h3>Einstellungen</h3><button class="iconbtn" data-action="close-modal">${ic('close')}</button></div>
+    <div class="modal-body">
+      <div class="settings-tabs">
+        <button class="${state.settingsTab==='sync'?'active':''}" data-action="settings-tab" data-tab="sync">Dropbox-Sync</button>
+        <button class="${state.settingsTab==='data'?'active':''}" data-action="settings-tab" data-tab="data">Daten &amp; Backup</button>
+      </div>
+      ${state.settingsTab==='sync'?renderTabSync():renderTabData()}
+    </div>
+  `);
+  bindSettingsEvents();
+}
+function renderTabSync(){
+  const s=state.settings; const connected=dbxConnected();
+  const last=state.dbx.lastSync; const lastTxt=last?new Date(last).toLocaleString('de-DE'):'noch nie';
+  return `<div class="stack">
+    <div class="info-box"><b>Dropbox-Sync</b> hält Zulieferer, Termine, Fotos und Drehplan auf allen deinen Geräten synchron. Änderungen werden automatisch in deine Dropbox gespeichert.</div>
+    ${connected?`
+      <div class="info-box" style="background:var(--green-soft);color:var(--ink)">
+        <b style="color:var(--green)">✓ Verbunden</b><br>
+        Letzter Sync: ${escapeHtml(lastTxt)}<br>
+        Datei: <code>${escapeHtml(s.dbxPath)}</code> · Fotos-Ordner: <code>${escapeHtml(s.dbxPhotosFolder)}</code>
+        ${state.dbx.lastError?`<br><span style="color:var(--terra)">Fehler: ${escapeHtml(state.dbx.lastError)}</span>`:''}
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="s-dbxauto" ${s.dbxAutoSync?'checked':''}>
+        <span class="switch"></span>
+        <span class="label"><div class="t">Automatisch synchronisieren</div><div class="sub">Bei jeder Änderung in die Dropbox hochladen</div></span>
+      </label>
+      <button class="btn btn-block" data-action="dbx-pull">${ic('download')} Jetzt aus Dropbox laden</button>
+      <button class="btn btn-block" data-action="dbx-push">${ic('upload')} Jetzt in Dropbox speichern</button>
+      <button class="btn btn-block btn-danger" data-action="dbx-disconnect">Dropbox trennen</button>
+    `:`
+      <div class="info-box">
+        <b>Einmalige Einrichtung (5 Minuten):</b><br>
+        1. Öffne <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener" style="color:var(--green);font-weight:600">dropbox.com/developers/apps</a><br>
+        2. Klick <b>„Create app"</b><br>
+        3. Wähle <b>„Scoped access"</b> → <b>„App folder"</b> (nur ein eigener Ordner, nicht deine ganze Dropbox)<br>
+        4. Name z.B. „September Zulieferer"<br>
+        5. Tab <b>„Permissions"</b>: Häkchen bei <code>files.content.write</code> und <code>files.content.read</code> → speichern<br>
+        6. Tab <b>„Settings"</b>: <b>„App key"</b> kopieren und unten einfügen<br>
+        7. Unten auf <b>„Verbinden"</b> klicken → Dropbox-Fenster öffnet sich → bestätigen → Code zurückkopieren
+      </div>
+      <div class="field"><label>App Key</label><input type="text" id="s-dbxkey" value="${escapeAttr(s.dbxAppKey)}" placeholder="z.B. abc1234def5678" autocomplete="off"></div>
+      <button class="btn btn-primary btn-block" data-action="dbx-start-auth">Mit Dropbox verbinden</button>
+      <div id="dbx-code-box" style="${state._dbxPending?'':'display:none'}">
+        <div class="field" style="margin-top:10px"><label>Autorisierungs-Code aus Dropbox</label>
+          <input type="text" id="s-dbxcode" placeholder="Code einfügen" autocomplete="off">
+          <div class="hint">Falls der Code nicht mehr sichtbar ist, erneut „Mit Dropbox verbinden" klicken.</div>
+        </div>
+        <button class="btn btn-green btn-block" data-action="dbx-finish-auth">Code bestätigen &amp; verbinden</button>
+      </div>
+    `}
+  </div>`;
+}
+function renderTabData(){
+  return `<div class="stack">
+    <div class="info-box">Lokale Sicherung als Datei — unabhängig von Dropbox. Praktisch vor größeren Änderungen, oder um Daten auf ein neues Gerät zu übertragen.</div>
+    <button class="btn btn-block" data-action="export-backup">${ic('download')} Alle Daten als Datei sichern</button>
+    <button class="btn btn-block" data-action="import-backup">${ic('upload')} Sicherung wiederherstellen</button>
+    <input type="file" id="backup-file" accept="application/json" style="display:none">
+    <div class="divider">Kalender-Export</div>
+    <button class="btn btn-block" data-action="ics-everything">${ic('download')} Termine + Drehplan als .ics</button>
+  </div>`;
+}
+function bindSettingsEvents(){
+  const key=document.getElementById('s-dbxkey');
+  if(key) key.addEventListener('change',()=>{ state.settings.dbxAppKey=key.value.trim(); saveSettings(); });
+  const auto=document.getElementById('s-dbxauto');
+  if(auto) auto.addEventListener('change',()=>{ state.settings.dbxAutoSync=auto.checked; saveSettings(); });
+  const fileInp=document.getElementById('backup-file');
+  if(fileInp) fileInp.addEventListener('change',e=>{ const f=e.target.files[0]; if(f) importBackupFile(f); fileInp.value=''; });
+}
+
+function openSupplierForm(id){
+  const existing=id?state.suppliers.find(x=>x.id===id):null;
+  const s=existing||{name:'',category:'',contactPerson:'',phone:'',email:'',address:'',website:'',notes:''};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Zulieferer bearbeiten':'Neuer Zulieferer'}</h3><button class="iconbtn" data-action="close-modal">${ic('close')}</button></div>
+    <div class="modal-body stack">
+      <div class="field"><label>Name *</label><input id="f-name" value="${escapeAttr(s.name)}" placeholder="z.B. Requisiten Müller GmbH"></div>
+      <div class="field"><label>Kategorie</label><select id="f-category">
+        <option value="">–</option>
+        ${SUPPLIER_CATEGORIES.map(c=>`<option value="${escapeAttr(c)}" ${s.category===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}
+      </select></div>
+      <div class="field-row">
+        <div class="field"><label>Ansprechpartner</label><input id="f-contact" value="${escapeAttr(s.contactPerson)}"></div>
+        <div class="field"><label>Telefon</label><input id="f-phone" value="${escapeAttr(s.phone)}" type="tel"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>E-Mail</label><input id="f-email" value="${escapeAttr(s.email)}" type="email"></div>
+        <div class="field"><label>Website</label><input id="f-website" value="${escapeAttr(s.website)}"></div>
+      </div>
+      <div class="field"><label>Adresse</label><input id="f-address" value="${escapeAttr(s.address)}" placeholder="Straße, PLZ Ort"></div>
+      <div class="field"><label>Was ist ausgemacht / Notizen</label><textarea id="f-notes" rows="4">${escapeHtml(s.notes)}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn grow" data-action="close-modal">Abbrechen</button>
+      <button class="btn btn-primary grow" data-action="save-supplier" data-id="${existing?existing.id:''}">Speichern</button>
+    </div>
+  `);
+}
+async function saveSupplierForm(id){
+  const name=document.getElementById('f-name').value.trim();
+  if(!name){ toast('Bitte einen Namen eingeben'); return; }
+  const data={
+    name,
+    category:document.getElementById('f-category').value,
+    contactPerson:document.getElementById('f-contact').value.trim(),
+    phone:document.getElementById('f-phone').value.trim(),
+    email:document.getElementById('f-email').value.trim(),
+    website:document.getElementById('f-website').value.trim(),
+    address:document.getElementById('f-address').value.trim(),
+    notes:document.getElementById('f-notes').value.trim(),
+  };
+  if(id){
+    const s=state.suppliers.find(x=>x.id===id); Object.assign(s,data);
+  }else{
+    data.id=uid(); data.createdAt=new Date().toISOString();
+    state.suppliers.push(data);
+    state.activeSupplierId=data.id; state.view='supplier-detail';
+  }
+  await saveSuppliers();
+  closeModal(); toast('Gespeichert'); render();
+}
+function deleteSupplier(id){
+  if(!confirm('Diesen Zulieferer inkl. aller Termine und Fotos löschen?')) return;
+  const photoIds=state.photos.filter(p=>p.supplierId===id).map(p=>p.id);
+  state.suppliers=state.suppliers.filter(x=>x.id!==id);
+  state.appointments=state.appointments.filter(a=>a.supplierId!==id);
+  state.photos=state.photos.filter(p=>p.supplierId!==id);
+  photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{}));
+  saveSuppliers(); saveAppointments(); savePhotos();
+  state.view='suppliers'; state.activeSupplierId=null;
+  toast('Zulieferer gelöscht'); render();
+}
+
+function openApptForm(id,defaults={}){
+  const existing=id?state.appointments.find(x=>x.id===id):null;
+  const a=existing||{supplierId:defaults.supplierId||'',title:'',date:defaults.date||todayISO(),startTime:'',endTime:'',location:'',notes:'',status:'geplant'};
+  const supplierOptions=state.suppliers.slice().sort((x,y)=>x.name.localeCompare(y.name,'de')).map(sp=>`<option value="${sp.id}" ${a.supplierId===sp.id?'selected':''}>${escapeHtml(sp.name)}</option>`).join('');
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Termin bearbeiten':'Neuer Termin'}</h3><button class="iconbtn" data-action="close-modal">${ic('close')}</button></div>
+    <div class="modal-body stack">
+      <div class="field"><label>Zulieferer *</label><select id="f-supplier"><option value="">– auswählen –</option>${supplierOptions}</select></div>
+      <div class="field"><label>Titel *</label><input id="f-title" value="${escapeAttr(a.title)}" placeholder="z.B. Anlieferung Requisiten"></div>
+      <div class="field-row3">
+        <div class="field"><label>Datum *</label><input id="f-date" type="date" value="${escapeAttr(a.date)}"></div>
+        <div class="field"><label>Von</label><input id="f-start" type="time" value="${escapeAttr(a.startTime||'')}"></div>
+        <div class="field"><label>Bis</label><input id="f-end" type="time" value="${escapeAttr(a.endTime||'')}"></div>
+      </div>
+      <div class="field"><label>Ort (falls abweichend von Zulieferer-Adresse)</label><input id="f-loc" value="${escapeAttr(a.location||'')}"></div>
+      <div class="field"><label>Status</label><select id="f-status">${APPT_STATUS.map(st=>`<option value="${st.v}" ${a.status===st.v?'selected':''}>${st.l}</option>`).join('')}</select></div>
+      <div class="field"><label>Notizen / was ist ausgemacht</label><textarea id="f-notes" rows="3">${escapeHtml(a.notes||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn grow" data-action="close-modal">Abbrechen</button>
+      <button class="btn btn-primary grow" data-action="save-appt" data-id="${existing?existing.id:''}">Speichern</button>
+    </div>
+  `);
+}
+async function saveApptForm(id){
+  const supplierId=document.getElementById('f-supplier').value;
+  const title=document.getElementById('f-title').value.trim();
+  const date=document.getElementById('f-date').value;
+  if(!supplierId){toast('Bitte Zulieferer auswählen');return;}
+  if(!title){toast('Bitte Titel eingeben');return;}
+  if(!date){toast('Bitte Datum eingeben');return;}
+  const data={
+    supplierId, title, date,
+    startTime:document.getElementById('f-start').value,
+    endTime:document.getElementById('f-end').value,
+    location:document.getElementById('f-loc').value.trim(),
+    status:document.getElementById('f-status').value,
+    notes:document.getElementById('f-notes').value.trim(),
+  };
+  if(id){ const a=state.appointments.find(x=>x.id===id); Object.assign(a,data); }
+  else{ data.id=uid(); data.createdAt=new Date().toISOString(); state.appointments.push(data); }
+  await saveAppointments();
+  closeModal(); toast('Termin gespeichert'); render();
+}
+function deleteAppt(id){
+  if(!confirm('Diesen Termin löschen?')) return;
+  state.appointments=state.appointments.filter(x=>x.id!==id);
+  saveAppointments(); toast('Termin gelöscht'); render();
+}
+
+function openDayModal(iso){
+  const dp=drehplanForDate(iso);
+  const appts=appointmentsForDate(iso);
+  openModal(`
+    <div class="modal-head"><h3>${fmtDateLong(iso)}</h3><button class="iconbtn" data-action="close-modal">${ic('close')}</button></div>
+    <div class="modal-body stack">
+      ${dp.length?`<div class="divider">Drehplan</div>${dp.map(d=>`
+        <div class="card pad" style="margin-bottom:6px">
+          <div class="row between"><b>${d.day&&d.day!=='-'?dpTypeLabel(d.type)+' '+escapeHtml(d.day):dpTypeLabel(d.type)}</b><span class="pill ${dpPillClass(d.type)}">${dpTypeLabel(d.type)}</span></div>
+          ${d.mainLocation?`<div style="margin-top:4px">${ic('pin')} ${escapeHtml(d.mainLocation)}</div>`:''}
+          ${d.additionalLocations&&d.additionalLocations.length?`<div style="margin-top:4px;font-size:12px;color:var(--ink-muted)">Motivwechsel: ${escapeHtml(d.additionalLocations.join(' / '))}</div>`:''}
+          ${d.note?`<div style="margin-top:4px;font-size:12px;color:var(--ink-muted)">${escapeHtml(d.note)}</div>`:''}
+        </div>`).join('')}`:`<div class="info-box">Kein Drehplan-Eintrag für diesen Tag.<br><button class="btn btn-sm" style="margin-top:8px" data-action="add-dp-row-date" data-date="${iso}">${ic('plus')} Eintrag hinzufügen</button></div>`}
+      <div class="divider">Zulieferer-Termine</div>
+      ${appts.length?`<div class="appt-list">${appts.map(a=>renderApptItem(a)).join('')}</div>`:`<div class="empty" style="padding:14px">Keine Termine an diesem Tag</div>`}
+      <button class="btn btn-block" data-action="new-appt-date" data-date="${iso}">${ic('plus')} Termin an diesem Tag anlegen</button>
+    </div>
+  `);
+}
+
+async function openPhotoModal(id){
+  const p=state.photos.find(x=>x.id===id); if(!p) return;
+  openModal(`
+    <div class="modal-head"><h3>Foto</h3><button class="iconbtn" data-action="close-modal">${ic('close')}</button></div>
+    <div class="modal-body stack">
+      <img id="photo-full-img" src="${p.thumb}" style="width:100%;border-radius:10px;background:var(--bg-sunk)">
+      <div class="field"><label>Beschriftung</label><input id="f-photo-caption" value="${escapeAttr(p.caption||'')}" placeholder="z.B. Stoffmuster Vorhänge"></div>
+      <div class="row" style="gap:8px">
+        <button class="btn grow" data-action="save-photo-caption" data-id="${p.id}">Speichern</button>
+        <button class="btn btn-danger grow" data-action="del-photo" data-id="${p.id}">${ic('trash')} Löschen</button>
+      </div>
+    </div>
+  `);
+  getPhotoFullSrc(p).then(src=>{ const img=document.getElementById('photo-full-img'); if(img) img.src=src; });
+}
+function savePhotoCaption(id){
+  const p=state.photos.find(x=>x.id===id); if(!p) return;
+  p.caption=document.getElementById('f-photo-caption').value.trim();
+  savePhotos(); closeModal(); render(); toast('Gespeichert');
+}
+
+/* ---------------------------- Backup Export/Import ---------------------------- */
+function exportBackup(){
+  const payload={format:'sep_zulieferer_backup_v1',savedAt:new Date().toISOString(),suppliers:state.suppliers,appointments:state.appointments,photos:state.photos,drehplan:state.drehplan};
+  downloadFile('september-zulieferer-backup-'+todayISO()+'.json',JSON.stringify(payload,null,2),'application/json');
+}
+async function importBackupFile(file){
+  try{
+    const data=JSON.parse(await file.text());
+    if(!confirm('Aktuelle Daten in der App mit dem Inhalt dieser Sicherung überschreiben?')) return;
+    if(Array.isArray(data.suppliers)) state.suppliers=data.suppliers;
+    if(Array.isArray(data.appointments)) state.appointments=data.appointments;
+    if(Array.isArray(data.photos)) state.photos=data.photos;
+    if(Array.isArray(data.drehplan)) state.drehplan=data.drehplan;
+    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan();
+    toast('Sicherung geladen'); closeModal(); render();
+  }catch(e){ toast('Fehler beim Laden: '+e.message); }
+}
+
+/* ---------------------------- Globale Event-Delegation ---------------------------- */
+document.addEventListener('click', async (e)=>{
+  const t=e.target.closest('[data-action]'); if(!t) return;
+  const action=t.dataset.action;
+  switch(action){
+    case 'noop': break;
+    case 'modal-bg-close': closeModal(); break;
+    case 'close-modal': closeModal(); break;
+    case 'set-view': setView(t.dataset.view); break;
+    case 'open-supplier': openSupplierDetail(t.dataset.id); break;
+    case 'new-supplier': openSupplierForm(null); break;
+    case 'edit-supplier': openSupplierForm(t.dataset.id); break;
+    case 'save-supplier': saveSupplierForm(t.dataset.id||null); break;
+    case 'del-supplier': deleteSupplier(t.dataset.id); break;
+    case 'new-appt': openApptForm(null,{supplierId:t.dataset.supplier||state.activeSupplierId}); break;
+    case 'new-appt-date': closeModal(); openApptForm(null,{date:t.dataset.date,supplierId:state.activeSupplierId}); break;
+    case 'edit-appt': openApptForm(t.dataset.id); break;
+    case 'save-appt': saveApptForm(t.dataset.id||null); break;
+    case 'del-appt': deleteAppt(t.dataset.id); break;
+    case 'ics-appt': exportAppointmentICS(t.dataset.id); break;
+    case 'ics-all-appts': exportAllAppointmentsICS(); break;
+    case 'ics-supplier-appts': exportSupplierAppointmentsICS(t.dataset.id); break;
+    case 'ics-drehplan': exportDrehplanICS(); break;
+    case 'ics-everything': exportEverythingICS(); break;
+    case 'del-photo': deletePhoto(t.dataset.id); break;
+    case 'open-photo': openPhotoModal(t.dataset.id); break;
+    case 'save-photo-caption': savePhotoCaption(t.dataset.id); break;
+    case 'open-day': openDayModal(t.dataset.date); break;
+    case 'cal-prev': state.calMonth=new Date(state.calMonth.getFullYear(),state.calMonth.getMonth()-1,1); render(); break;
+    case 'cal-next': state.calMonth=new Date(state.calMonth.getFullYear(),state.calMonth.getMonth()+1,1); render(); break;
+    case 'cal-today': state.calMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1); render(); break;
+    case 'add-dp-row': addDrehplanRow(); break;
+    case 'add-dp-row-date': addDrehplanRow(t.dataset.date); closeModal(); setView('drehplan'); break;
+    case 'del-dp-row': deleteDrehplanRow(t.dataset.id); break;
+    case 'open-settings': openSettings(); break;
+    case 'settings-tab': state.settingsTab=t.dataset.tab; renderSettingsModal(); break;
+    case 'dbx-start-auth': {
+      const key=document.getElementById('s-dbxkey'); if(key) state.settings.dbxAppKey=key.value.trim();
+      await saveSettings(); await dbxStartAuth(); break;
+    }
+    case 'dbx-finish-auth': {
+      const code=document.getElementById('s-dbxcode');
+      await dbxFinishAuth(code?code.value.trim():''); renderSettingsModal(); break;
+    }
+    case 'dbx-pull': { const ok=await dbxLoadFromCloud(); toast(ok?'Aus Dropbox geladen':'Keine Cloud-Daten gefunden'); render(); if(state.settingsOpen) renderSettingsModal(); break; }
+    case 'dbx-push': { const ok=await dbxSaveToCloud(true); toast(ok?'In Dropbox gespeichert':'Fehler beim Speichern'); if(state.settingsOpen) renderSettingsModal(); break; }
+    case 'dbx-disconnect': await dbxDisconnect(); break;
+    case 'export-backup': exportBackup(); break;
+    case 'import-backup': document.getElementById('backup-file')?.click(); break;
+  }
+});
+window.addEventListener('keydown',e=>{ if(e.key==='Escape' && document.getElementById('modal-root').innerHTML) closeModal(); });
+
+/* ---------------------------- Bootstrap ---------------------------- */
+(async function init(){
+  await loadAll();
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='';
+  render();
+})();
+</script>
+</body>
+</html>
