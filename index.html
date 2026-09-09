@@ -83,6 +83,7 @@
   .pill.dreh{background:var(--terra-soft);color:var(--terra)}
   .pill.frei{background:var(--bg-sunk);color:var(--ink-muted)}
   .pill.unit{background:var(--blue-soft);color:var(--blue)}
+  .pill.privat{background:#ece0f5;color:#6b3fa0}
   .pill.status-geplant{background:var(--gold-soft);color:#8a6d1f}
   .pill.status-bestaetigt{background:var(--green-soft);color:var(--green)}
   .pill.status-erledigt{background:var(--bg-sunk);color:var(--ink-muted)}
@@ -112,6 +113,7 @@
   .cal-day .dap{font-size:10px;color:var(--gold);display:flex;align-items:center;gap:3px}
   .cal-day .dap .icon{width:11px;height:11px}
   .cal-day .dap-off{font-size:10px;color:var(--pink);font-weight:600}
+  .cal-day .dpriv{font-size:10.5px;background:#ece0f5;color:#6b3fa0;border-radius:6px;padding:2px 5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pill.dayoff{background:var(--pink-soft);color:var(--pink)}
   tr.ap-off td{background:var(--pink-soft)}
   @media(max-width:720px){
@@ -428,6 +430,7 @@ const DP_TYPES = [
   {v:'c-unit',l:'C Cam Unit'},
   {v:'dreh-frei',l:'Drehfrei'},
   {v:'sonstig',l:'Sonstiges'},
+  {v:'privat',l:'🔒 Privater Termin'},
 ];
 function dpTypeLabel(v){return (DP_TYPES.find(t=>t.v===v)||{}).l||v;}
 
@@ -855,11 +858,12 @@ function exportAllAppointmentsICS(){
 }
 function exportDrehplanICS(){
   if(!state.drehplan.length){toast('Kein Drehplan vorhanden');return;}
-  const ics=buildICS(state.drehplan.filter(d=>d.date).map(dpToICSEvent));
+  // Private Termine werden bewusst nie mitexportiert (Datei könnte geteilt werden)
+  const ics=buildICS(state.drehplan.filter(d=>d.date&&d.type!=='privat').map(dpToICSEvent));
   downloadFile('drehplan.ics',ics,'text/calendar');
 }
 function exportEverythingICS(){
-  const events=[...state.drehplan.filter(d=>d.date).map(dpToICSEvent),...state.appointments.map(apptToICSEvent)];
+  const events=[...state.drehplan.filter(d=>d.date&&d.type!=='privat').map(dpToICSEvent),...state.appointments.map(apptToICSEvent)];
   if(!events.length){toast('Keine Daten zum Exportieren');return;}
   downloadFile('september-kalender.ics',buildICS(events),'text/calendar');
 }
@@ -920,7 +924,7 @@ function drehplanForDate(iso){ return state.drehplan.filter(d=>d.date===iso); }
 function appointmentsForDate(iso){ return state.appointments.filter(a=>a.date===iso).sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||'')); }
 function arbeitsplanForDate(iso){ return state.arbeitsplan.filter(x=>x.date===iso); }
 function apptSupplierName(a){ const s=state.suppliers.find(x=>x.id===a.supplierId); return (s?s.name+': ':'')+a.title; }
-function dpPillClass(type){ return type==='dreh-frei'?'frei':(type&&type.includes('unit'))?'unit':'dreh'; }
+function dpPillClass(type){ return type==='privat'?'privat':type==='dreh-frei'?'frei':(type&&type.includes('unit'))?'unit':'dreh'; }
 
 function renderDashboard(){
   const el=document.getElementById('view-dashboard');
@@ -931,7 +935,7 @@ function renderDashboard(){
       <div class="kpi"><div class="n">${state.suppliers.length}</div><div class="l">Zulieferer</div></div>
       <div class="kpi"><div class="n">${state.appointments.filter(a=>a.date>=t).length}</div><div class="l">Anstehende Termine</div></div>
       <div class="kpi"><div class="n">${state.photos.length}</div><div class="l">Fotos</div></div>
-      <div class="kpi"><div class="n">${state.drehplan.filter(d=>d.type!=='dreh-frei').length}</div><div class="l">Drehtage geplant</div></div>
+      <div class="kpi"><div class="n">${state.drehplan.filter(d=>d.type!=='dreh-frei'&&d.type!=='privat').length}</div><div class="l">Drehtage geplant</div></div>
     </div>
     <div class="card pad" style="margin-bottom:16px">
       <div class="cal-head">
@@ -961,7 +965,8 @@ function renderCalGrid(){
     const inMonth=d.getMonth()===state.calMonth.getMonth();
     const dp=drehplanForDate(iso);
     const appts=appointmentsForDate(iso);
-    const shootEntries=dp.filter(x=>x.type!=='dreh-frei');
+    const privateEntries=dp.filter(x=>x.type==='privat');
+    const shootEntries=dp.filter(x=>x.type!=='dreh-frei'&&x.type!=='privat');
     const freeEntry=dp.find(x=>x.type==='dreh-frei');
     let locHtml='';
     if(shootEntries.length){
@@ -970,6 +975,7 @@ function renderCalGrid(){
     } else if(freeEntry){
       locHtml=`<div class="dfrei">Drehfrei</div>`;
     }
+    const privHtml=privateEntries.length?`<div class="dpriv">🔒 ${escapeHtml(privateEntries.map(x=>x.note||x.mainLocation||'Privat').join(', '))}</div>`:'';
     const apptHtml=appts.slice(0,2).map(a=>`<div class="dappt status-${a.status}">${escapeHtml((a.startTime?a.startTime+' ':'')+apptSupplierName(a))}</div>`).join('');
     const moreHtml=appts.length>2?`<div class="dmore">+${appts.length-2} mehr</div>`:'';
     const ap=arbeitsplanForDate(iso);
@@ -977,7 +983,7 @@ function renderCalGrid(){
     const apHtml=apWorking.length?`<div class="dap">${ic('clock')} ${apWorking.length} im Einsatz</div>`:'';
     const apOffHtml=apOff.length?`<div class="dap-off">🌸 ${apOff.length} frei (${apOff.map(x=>x.person).join(', ')})</div>`:'';
     cells+=`<div class="cal-day${inMonth?'':' out'}${iso===today?' today':''}" data-action="open-day" data-date="${iso}">
-      <div class="dnum">${d.getDate()}</div>${locHtml}${apptHtml}${moreHtml}${apHtml}${apOffHtml}
+      <div class="dnum">${d.getDate()}</div>${locHtml}${privHtml}${apptHtml}${moreHtml}${apHtml}${apOffHtml}
     </div>`;
   }
   return `<div class="cal-grid">${cells}</div>`;
@@ -1160,7 +1166,7 @@ function renderDrehplan(){
         <button class="btn btn-primary btn-sm" data-action="add-dp-row">${ic('plus')} Zeile hinzufügen</button>
       </div>
     </div>
-    <div class="info-box" style="margin-bottom:12px">Aus dem Drehplan-PDF (Stand 04.09.2026) importiert. Änderungen am echten Drehplan hier nachtragen — die Kalender-Übersicht auf „Übersicht" aktualisiert sich automatisch.<br>Ändert sich der echte Drehplan später (neue PDF-Fassung), lass dir daraus eine JSON-Datei im gleichen Format erstellen und importiere sie über „Neuen Drehplan importieren" — dabei wird <b>nur diese Tabelle</b> ersetzt, Zulieferer, Termine und Fotos bleiben unverändert erhalten.</div>
+    <div class="info-box" style="margin-bottom:12px">Aus dem Drehplan-PDF (Stand 04.09.2026) importiert. Änderungen am echten Drehplan hier nachtragen — die Kalender-Übersicht auf „Übersicht" aktualisiert sich automatisch.<br>Ändert sich der echte Drehplan später (neue PDF-Fassung), lass dir daraus eine JSON-Datei im gleichen Format erstellen und importiere sie über „Neuen Drehplan importieren" — dabei wird <b>nur diese Tabelle</b> ersetzt, Zulieferer, Termine und Fotos bleiben unverändert erhalten.<br>Für eigene private Termine (z.B. Arzttermin) eine Zeile mit Typ „🔒 Privater Termin" anlegen — Beschreibung ins Feld „Notiz". Diese werden im Kalender lila markiert und nie mitexportiert, wenn du den Kalender teilst.</div>
     <div class="card"><div class="dp-wrap"><table class="dp-table" id="dp-table">
       <thead><tr><th>Tag</th><th>Datum</th><th>Wochentag</th><th>Typ</th><th>Hauptmotiv / Drehort</th><th>Zusatzmotive (bei Motivwechsel, mit „/" trennen)</th><th>Notiz</th><th></th></tr></thead>
       <tbody>${rows.map(renderDpRow).join('')}</tbody>
