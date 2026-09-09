@@ -870,6 +870,14 @@ function exportEverythingICS(){
   if(!events.length){toast('Keine Daten zum Exportieren');return;}
   downloadFile('september-kalender.ics',buildICS(events),'text/calendar');
 }
+function exportPrivateICS(){
+  // Eigene Datei nur für private Einträge — zum Import ins eigene Handy-/Privatkalender.
+  // Bewusst getrennt von den "normalen" Exporten, die weiterhin nie Privates enthalten,
+  // falls die mal mit dem Team geteilt werden.
+  const events=[...state.drehplan.filter(d=>d.date&&d.type==='privat').map(dpToICSEvent),...state.appointments.filter(a=>a.isPrivate).map(apptToICSEvent)];
+  if(!events.length){toast('Keine privaten Termine vorhanden');return;}
+  downloadFile('private-termine.ics',buildICS(events),'text/calendar');
+}
 function exportSupplierAppointmentsICS(supplierId){
   const s=state.suppliers.find(x=>x.id===supplierId);
   const list=state.appointments.filter(a=>a.supplierId===supplierId&&!a.isPrivate);
@@ -1122,8 +1130,9 @@ function renderAppointments(){
   el.innerHTML=`
     <div class="row between" style="margin-bottom:14px;flex-wrap:wrap;gap:10px">
       <h2 style="font-size:19px">Termine</h2>
-      <div class="row" style="gap:8px">
+      <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-sm" data-action="ics-all-appts">${ic('download')} Alle exportieren</button>
+        <button class="btn btn-sm" data-action="ics-private" title="Private Termine aus Drehplan + Terminen, z.B. für den Handy-Kalender">🔒 Private exportieren</button>
         <button class="btn btn-primary btn-sm" data-action="new-appt">${ic('plus')} Neuer Termin</button>
       </div>
     </div>
@@ -1163,6 +1172,7 @@ function renderDrehplan(){
       <h2 style="font-size:19px">Drehplan</h2>
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-sm" data-action="ics-drehplan">${ic('download')} Als Kalender exportieren</button>
+        <button class="btn btn-sm" data-action="ics-private" title="Private Termine aus Drehplan + Terminen, z.B. für den Handy-Kalender">🔒 Private exportieren</button>
         <button class="btn btn-sm" data-action="export-dp-json">${ic('download')} Als JSON sichern</button>
         <button class="btn btn-sm" data-action="import-dp-json">${ic('upload')} Neuen Drehplan importieren</button>
         <input type="file" id="dp-import-file" accept="application/json" style="display:none">
@@ -2113,6 +2123,7 @@ document.addEventListener('click', async (e)=>{
     case 'del-appt': deleteAppt(t.dataset.id); break;
     case 'ics-appt': exportAppointmentICS(t.dataset.id); break;
     case 'ics-all-appts': exportAllAppointmentsICS(); break;
+    case 'ics-private': exportPrivateICS(); break;
     case 'ics-supplier-appts': exportSupplierAppointmentsICS(t.dataset.id); break;
     case 'ics-drehplan': exportDrehplanICS(); break;
     case 'ics-everything': exportEverythingICS(); break;
