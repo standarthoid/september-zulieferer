@@ -769,10 +769,16 @@ function base64ToBlob(dataURL){
   return new Blob([arr],{type:mime});
 }
 
+function isHeicFile(file){
+  const type=(file.type||'').toLowerCase();
+  const name=(file.name||'').toLowerCase();
+  return type.includes('heic')||type.includes('heif')||name.endsWith('.heic')||name.endsWith('.heif');
+}
 async function addPhotos(files,meta={}){
-  const added=[];
+  const added=[]; const skippedHeic=[]; const skippedOther=[];
   for(const file of files){
-    if(!file.type.startsWith('image/')) continue;
+    if(isHeicFile(file)){ skippedHeic.push(file.name); continue; }
+    if(!file.type.startsWith('image/')){ skippedOther.push(file.name); continue; }
     try{
       const fullBlob=await compressImage(file,1600,0.82);
       const thumbBlob=await compressImage(file,320,0.68);
@@ -794,13 +800,27 @@ async function addPhotos(files,meta={}){
         dbxUploadBinary(path,fullBlob).then(()=>{ photo.dropboxPath=path; savePhotos(); updateSyncIndicator(); })
           .catch(err=>{ console.warn('Foto-Sync fehlgeschlagen',err); });
       }
-    }catch(e){ console.warn('Foto übersprungen',e); }
+    }catch(e){ console.warn('Foto übersprungen',file.name,e); skippedOther.push(file.name); }
   }
   if(added.length) await savePhotos();
+  added.skippedHeic=skippedHeic; added.skippedOther=skippedOther;
   return added;
 }
+// Baut eine ehrliche Toast-Meldung: wie viele wirklich hinzugefügt wurden,
+// plus Grund für übersprungene Fotos (v.a. HEIC — von Browsern nicht lesbar).
+function photoUploadToast(added){
+  const n=added.length;
+  let msg=n?`${n} Foto${n===1?'':'s'} hinzugefügt`:'Kein Foto hinzugefügt';
+  if(added.skippedHeic&&added.skippedHeic.length){
+    msg+=` · ${added.skippedHeic.length} im HEIC-Format übersprungen (im Handy auf "Kompatibel"/JPEG umstellen oder vorher exportieren)`;
+  }
+  if(added.skippedOther&&added.skippedOther.length){
+    msg+=` · ${added.skippedOther.length} konnten nicht gelesen werden`;
+  }
+  toast(msg);
+}
 async function addPhotosToSupplier(files,supplierId,appointmentId){
-  return (await addPhotos(files,{supplierId,appointmentId})).length;
+  return await addPhotos(files,{supplierId,appointmentId});
 }
 async function deletePhoto(id){
   const p=state.photos.find(x=>x.id===id); if(!p) return;
@@ -1162,7 +1182,7 @@ function bindSupplierDetailEvents(supplierId){
   zone.addEventListener('click',()=>input.click());
   input.addEventListener('change',async e=>{
     const files=Array.from(e.target.files);
-    if(files.length){ const n=await addPhotosToSupplier(files,supplierId,null); toast(n+' Foto(s) hinzugefügt'); render(); }
+    if(files.length){ const added=await addPhotosToSupplier(files,supplierId,null); photoUploadToast(added); render(); }
     input.value='';
   });
   zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
@@ -1170,7 +1190,7 @@ function bindSupplierDetailEvents(supplierId){
   zone.addEventListener('drop',async e=>{
     e.preventDefault(); zone.classList.remove('drag');
     const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
-    if(files.length){ const n=await addPhotosToSupplier(files,supplierId,null); toast(n+' Foto(s) hinzugefügt'); render(); }
+    if(files.length){ const added=await addPhotosToSupplier(files,supplierId,null); photoUploadToast(added); render(); }
   });
 }
 
@@ -1629,7 +1649,7 @@ function bindMotivblattEditEvents(mb){
       zone.addEventListener('click',()=>fileInp.click());
       fileInp.addEventListener('change',async e=>{
         const files=Array.from(e.target.files);
-        if(files.length){ await addPhotos(files,{motivblattId:mb.id,untermotivId:uidVal}); toast(files.length+' Foto(s) hinzugefügt'); render(); }
+        if(files.length){ const added=await addPhotos(files,{motivblattId:mb.id,untermotivId:uidVal}); photoUploadToast(added); render(); }
         fileInp.value='';
       });
       zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
@@ -1637,7 +1657,7 @@ function bindMotivblattEditEvents(mb){
       zone.addEventListener('drop',async e=>{
         e.preventDefault(); zone.classList.remove('drag');
         const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
-        if(files.length){ await addPhotos(files,{motivblattId:mb.id,untermotivId:uidVal}); toast(files.length+' Foto(s) hinzugefügt'); render(); }
+        if(files.length){ const added=await addPhotos(files,{motivblattId:mb.id,untermotivId:uidVal}); photoUploadToast(added); render(); }
       });
     }
   });
@@ -1920,7 +1940,7 @@ function bindLeihlisteEditEvents(ll){
     zone.addEventListener('click',()=>fileInp.click());
     fileInp.addEventListener('change',async e=>{
       const files=Array.from(e.target.files);
-      if(files.length){ await addPhotos(files,{leihlisteId:ll.id}); toast(files.length+' Foto(s) hinzugefügt'); render(); }
+      if(files.length){ const added=await addPhotos(files,{leihlisteId:ll.id}); photoUploadToast(added); render(); }
       fileInp.value='';
     });
     zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
@@ -1928,7 +1948,7 @@ function bindLeihlisteEditEvents(ll){
     zone.addEventListener('drop',async e=>{
       e.preventDefault(); zone.classList.remove('drag');
       const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
-      if(files.length){ await addPhotos(files,{leihlisteId:ll.id}); toast(files.length+' Foto(s) hinzugefügt'); render(); }
+      if(files.length){ const added=await addPhotos(files,{leihlisteId:ll.id}); photoUploadToast(added); render(); }
     });
   }
 
