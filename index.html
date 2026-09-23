@@ -1955,28 +1955,42 @@ async function openLeihlistePrint(id){
     try{ img.src=await getPhotoFullSrc(p); }catch(e){}
   }
 }
+function mbSheetHeaderHTML(titleBoxLabel,notesHtml){
+  const logo=state.settings.companyLogo;
+  const patternStyle=state.settings.headerPattern?` style="background-image:url('${escapeAttr(state.settings.headerPattern)}')"`:'';
+  return `
+    <div class="diamond-banner"${patternStyle}></div>
+    <div class="mb-title">${escapeHtml(state.settings.defaultProjectTitle||'September')}</div>
+    <div class="diamond-banner"${patternStyle}></div>
+    <div class="mb-motiv-box"><h2>${escapeHtml(titleBoxLabel)}</h2></div>
+    <div class="mb-info-row">
+      <div class="mb-address-box">${notesHtml}</div>
+      <div class="mb-logo-box">${logo?`<img src="${logo}">`:''}</div>
+    </div>`;
+}
 function renderLeihlistePrint(){
   const el=document.getElementById('view-leihliste-print');
   const ll=state.leihlisten.find(x=>x.id===state.printLeihlisteId);
   if(!ll){ el.innerHTML=`<div class="empty">Leihliste nicht gefunden</div>`; return; }
   const photos=state.photos.filter(p=>p.leihlisteId===ll.id);
+  const notesHtml=`${ll.notes?`<div class="mb-label">Notizen:</div><div>${escapeHtml(ll.notes)}</div>`:''}<div class="mb-label" style="margin-top:${ll.notes?'10px':'0'}">Stand: ${escapeHtml(fmtDate(todayISO()))}</div>`;
   el.innerHTML=`
-    <div class="ll-print-wrap">
+    <div class="mb-print-wrap">
       <div class="mb-sheet-toolbar no-print">
         <button class="btn btn-sm" data-action="set-view" data-view="leihliste-edit">${ic('back')} Zurück zum Bearbeiten</button>
         <button class="btn btn-primary btn-sm" data-action="do-print">${ic('download')} Als PDF drucken/speichern</button>
       </div>
-      <div class="ll-sheet">
-        <h1>${escapeHtml(ll.title||'Leihliste')}</h1>
-        <div class="ll-date">Stand: ${fmtDate(todayISO())}</div>
-        ${ll.notes?`<div class="ll-notes">${escapeHtml(ll.notes)}</div>`:''}
+      <div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
+        ${mbSheetHeaderHTML('Leihliste: '+(ll.title||''),notesHtml)}
         ${photos.map(p=>`
-          <div class="ll-entry">
-            <img class="ll-photo" data-photo-id="${p.id}" src="${p.thumb}">
-            <table>
-              <thead><tr><th>Gegenstand</th><th>Anzahl</th></tr></thead>
-              <tbody>${(p.items||[]).filter(i=>i.description).map(i=>`<tr><td>${escapeHtml(i.description)}</td><td>${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="2" style="color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
-            </table>
+          <div class="mb-untermotiv-box" style="page-break-inside:avoid;break-inside:avoid">
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <img data-photo-id="${p.id}" src="${p.thumb}" style="width:220px;height:220px;object-fit:cover;border-radius:2px;flex:none;border:1px solid #6fb8dd">
+              <table style="flex:1;min-width:220px;border-collapse:collapse;font-size:calc(13px * var(--mb-scale,1))">
+                <thead><tr><th style="text-align:left;border-bottom:1px solid #6fb8dd;padding:5px 8px">Gegenstand</th><th style="text-align:left;border-bottom:1px solid #6fb8dd;padding:5px 8px">Anzahl</th></tr></thead>
+                <tbody>${(p.items||[]).filter(i=>i.description).map(i=>`<tr><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0">${escapeHtml(i.description)}</td><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0">${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="2" style="padding:5px 8px;color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
+              </table>
+            </div>
           </div>`).join('')}
         ${photos.length?'':'<div style="color:#999">Noch keine Fotos hinzugefügt</div>'}
       </div>
@@ -1993,19 +2007,21 @@ function renderLeihlisteChecklist(){
   const photos=state.photos.filter(p=>p.leihlisteId===target.id);
   const rows=[];
   photos.forEach(p=>(p.items||[]).forEach(i=>{ if(i.description) rows.push(i); }));
+  const notesHtml=`<div class="mb-label">Stand: ${escapeHtml(fmtDate(todayISO()))} · zum Abhaken beim Abholen/Zurückgeben</div>`;
   el.innerHTML=`
-    <div class="ll-print-wrap">
+    <div class="mb-print-wrap">
       <div class="mb-sheet-toolbar no-print">
         <button class="btn btn-sm" data-action="set-view" data-view="leihliste-edit">${ic('back')} Zurück zum Bearbeiten</button>
         <button class="btn btn-primary btn-sm" data-action="do-print">${ic('download')} Als PDF drucken/speichern</button>
       </div>
-      <div class="ll-sheet">
-        <h1>${escapeHtml(target.title||'Leihliste')} — Checkliste</h1>
-        <div class="ll-date">Stand: ${fmtDate(todayISO())} · zum Abhaken beim Abholen/Zurückgeben</div>
-        <table class="ll-checklist">
-          <thead><tr><th></th><th>Gegenstand</th><th>Anzahl</th></tr></thead>
-          <tbody>${rows.map(i=>`<tr><td><span class="ll-checkbox"></span></td><td>${escapeHtml(i.description)}</td><td>${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
-        </table>
+      <div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
+        ${mbSheetHeaderHTML((target.title||'Leihliste')+' — Checkliste',notesHtml)}
+        <div class="mb-untermotiv-box">
+          <table class="ll-checklist" style="background:transparent">
+            <thead><tr><th></th><th>Gegenstand</th><th>Anzahl</th></tr></thead>
+            <tbody>${rows.map(i=>`<tr><td><span class="ll-checkbox"></span></td><td>${escapeHtml(i.description)}</td><td>${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;
