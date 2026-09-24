@@ -2032,9 +2032,12 @@ function renderLeihlisteEdit(){
       <div class="field"><label>Titel *</label><input id="llf-title" value="${escapeAttr(ll.title||'')}" placeholder="z.B. Leihliste Requisiten Müller GmbH"></div>
       <div class="field"><label>Notizen (optional)</label><textarea id="llf-notes" rows="2">${escapeHtml(ll.notes||'')}</textarea></div>
     </div>
-    <div class="row between" style="margin:0 0 10px"><h3 style="font-size:15px">Posten (Fotos &amp; Gegenstände)</h3></div>
+    <div class="row between" style="margin:0 0 10px">
+      <h3 style="font-size:15px">Posten (Fotos &amp; Gegenstände)</h3>
+      <button class="btn btn-sm" data-action="add-empty-posten" data-id="${ll.id}">${ic('plus')} Gegenstand ohne Foto</button>
+    </div>
     <div class="drop-zone" id="ll-drop" style="margin-bottom:12px">
-      ${ic('camera')}<div style="margin-top:4px;font-size:12.5px">Foto(s) hierher ziehen oder klicken — jedes Foto wird ein eigener Posten mit eigener Gegenstandsliste. Weitere Fotos zu einem Posten (z.B. Rückseite) lassen sich direkt bei diesem Posten ergänzen.</div>
+      ${ic('camera')}<div style="margin-top:4px;font-size:12.5px">Foto(s) hierher ziehen oder klicken — jedes Foto wird ein eigener Posten mit eigener Gegenstandsliste. Weitere Fotos zu einem Posten (z.B. Rückseite) lassen sich direkt bei diesem Posten ergänzen. Gegenstände ganz ohne Foto lassen sich oben rechts hinzufügen.</div>
       <input type="file" id="ll-photo-file" accept="image/*" multiple style="display:none">
     </div>
     <div id="ll-entries">${posten.map(renderLeihlistePosten).join('')}</div>
@@ -2152,6 +2155,14 @@ function reorderLeihlistePosten(leihlisteId,srcId,targetId){
 function nextLeihlistePostenOrder(leihlisteId){
   const existing=state.leihlistePosten.filter(x=>x.leihlisteId===leihlisteId);
   return existing.length?Math.max(...existing.map(x=>x.order||0))+1:0;
+}
+// Posten ganz ohne Foto (z.B. wenn es für den Gegenstand kein Bild gibt) — ein Foto
+// lässt sich über den "+ Foto"-Button am Posten jederzeit nachträglich ergänzen.
+function addEmptyPosten(leihlisteId){
+  const posten={id:uid(), leihlisteId, order:nextLeihlistePostenOrder(leihlisteId), items:[{id:uid(),description:'',quantity:'1'}]};
+  state.leihlistePosten.push(posten);
+  saveLeihlistePosten();
+  render();
 }
 // Jedes ausgewählte/abgelegte Foto in der Haupt-Dropzone wird ein eigener, neuer
 // Posten (bisheriges Verhalten). Für ein zusätzliches Foto INNERHALB eines
@@ -2892,6 +2903,7 @@ document.addEventListener('click', async (e)=>{
     case 'del-ll-item': deleteLeihlisteItem(t.dataset.postenId,t.dataset.itemId); break;
     case 'del-posten': deleteLeihlistePosten(t.dataset.postenId); break;
     case 'add-photo-to-posten': addPhotoToPosten(t.dataset.postenId); break;
+    case 'add-empty-posten': addEmptyPosten(t.dataset.id); break;
     case 'zoom-photo': openPhotoZoomEditor(t.dataset.id); break;
     case 'replace-photo': replacePhoto(t.dataset.id); break;
     case 'apply-photo-zoom': await applyPhotoZoom(t.dataset.id); break;
