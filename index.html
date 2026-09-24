@@ -2446,17 +2446,21 @@ function renderLeihlistePrint(){
     </div>
   `;
 }
-function openLeihlisteChecklist(id){
+async function openLeihlisteChecklist(id){
   state.printLeihlisteId=id; state.view='leihliste-checklist'; render();
+  const imgs=document.querySelectorAll('#view-leihliste-checklist img[data-photo-id]');
+  for(const img of imgs){
+    const p=state.photos.find(x=>x.id===img.dataset.photoId); if(!p) continue;
+    try{ img.src=await getPhotoDisplaySrc(p,900); }catch(e){}
+  }
 }
 function renderLeihlisteChecklist(){
   const el=document.getElementById('view-leihliste-checklist');
   const target=state.leihlisten.find(x=>x.id===state.printLeihlisteId);
   if(!target){ el.innerHTML=`<div class="empty">Leihliste nicht gefunden</div>`; return; }
   const posten=sortLeihlistePosten(state.leihlistePosten.filter(x=>x.leihlisteId===target.id));
-  const rows=[];
-  posten.forEach(p=>(p.items||[]).forEach(i=>{ if(i.description) rows.push(i); }));
   const notesHtml=`<div class="mb-label">Stand: ${escapeHtml(fmtDate(todayISO()))} · zum Abhaken beim Abholen/Zurückgeben</div>`;
+  const postenWithItems=posten.map(ps=>({ps, items:(ps.items||[]).filter(i=>i.description)})).filter(x=>x.items.length);
   el.innerHTML=`
     <div class="mb-print-wrap">
       <div class="mb-sheet-toolbar no-print">
@@ -2465,13 +2469,25 @@ function renderLeihlisteChecklist(){
       </div>
       <div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
         ${mbSheetHeaderHTML((target.title||'Leihliste')+' — Checkliste',notesHtml)}
-        <div class="mb-untermotiv-box">
-          <table class="ll-checklist" style="background:transparent;table-layout:fixed;width:100%">
-            <colgroup><col style="width:40px"><col><col style="width:70px"></colgroup>
-            <thead><tr><th></th><th style="text-align:left">Gegenstand</th><th style="text-align:right">Anzahl</th></tr></thead>
-            <tbody>${rows.map(i=>`<tr><td><span class="ll-checkbox"></span></td><td>${escapeHtml(i.description)}</td><td style="text-align:right">${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
-          </table>
-        </div>
+        ${postenWithItems.map(({ps,items})=>{
+          const photos=state.photos.filter(p=>p.postenId===ps.id);
+          const imgSize=photos.length>1?106:220;
+          const imgsHtml=photos.length
+            ? photos.map(p=>`<img data-photo-id="${p.id}" src="${p.thumb}" style="width:${imgSize}px;height:${imgSize}px;object-fit:cover;border-radius:2px;border:1px solid #6fb8dd">`).join('')
+            : `<div style="width:220px;height:220px;border:1px dashed #6fb8dd;border-radius:2px;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px">Kein Foto</div>`;
+          return `
+          <div class="mb-untermotiv-box" style="page-break-inside:avoid;break-inside:avoid">
+            <div style="display:flex;gap:16px">
+              <div style="width:228px;flex:none;display:flex;gap:6px;flex-wrap:wrap">${imgsHtml}</div>
+              <table style="flex:1;min-width:220px;border-collapse:collapse;table-layout:fixed;font-size:calc(13px * var(--mb-scale,1))">
+                <colgroup><col style="width:34px"><col><col style="width:64px"></colgroup>
+                <thead><tr><th style="border-bottom:1px solid #6fb8dd;padding:5px 8px"></th><th style="text-align:left;border-bottom:1px solid #6fb8dd;padding:5px 8px">Gegenstand</th><th style="text-align:right;border-bottom:1px solid #6fb8dd;padding:5px 8px">Anzahl</th></tr></thead>
+                <tbody>${items.map(i=>`<tr><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0"><span class="ll-checkbox"></span></td><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0;overflow-wrap:break-word">${escapeHtml(i.description)}</td><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0;text-align:right">${escapeHtml(i.quantity||'')}</td></tr>`).join('')}</tbody>
+              </table>
+            </div>
+          </div>`;
+        }).join('')}
+        ${postenWithItems.length?'':'<div style="color:#999">Keine Gegenstände erfasst</div>'}
       </div>
     </div>
   `;
@@ -2898,7 +2914,7 @@ document.addEventListener('click', async (e)=>{
     case 'edit-leihliste': openLeihlisteForm(t.dataset.id); break;
     case 'del-leihliste': deleteLeihliste(t.dataset.id); break;
     case 'print-leihliste': await openLeihlistePrint(t.dataset.id); break;
-    case 'checklist-leihliste': openLeihlisteChecklist(t.dataset.id); break;
+    case 'checklist-leihliste': await openLeihlisteChecklist(t.dataset.id); break;
     case 'add-ll-item': addLeihlisteItem(t.dataset.postenId); break;
     case 'del-ll-item': deleteLeihlisteItem(t.dataset.postenId,t.dataset.itemId); break;
     case 'del-posten': deleteLeihlistePosten(t.dataset.postenId); break;
