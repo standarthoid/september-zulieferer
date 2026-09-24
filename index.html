@@ -593,15 +593,48 @@ async function migrateLeihlistePosten(){
   let changed=false;
   state.photos.forEach(p=>{
     if(p.leihlisteId && !p.postenId){
-      const posten={id:p.id, leihlisteId:p.leihlisteId, order:p.order!=null?p.order:0, items:p.items||[]};
-      state.leihlistePosten.push(posten);
-      p.postenId=posten.id;
+      // Kollisionssicher: falls durch eine ältere, überschreibende Cloud-Sicherung
+      // (ohne leihlistePosten-Feld) schon ein Posten mit dieser id existiert, diesen
+      // wiederverwenden statt einen doppelten anzulegen (sonst: doppelte Anzeige).
+      const existing=state.leihlistePosten.find(x=>x.id===p.id);
+      if(existing){
+        p.postenId=existing.id;
+      }else{
+        const posten={id:p.id, leihlisteId:p.leihlisteId, order:p.order!=null?p.order:0, items:p.items||[]};
+        state.leihlistePosten.push(posten);
+        p.postenId=posten.id;
+      }
       delete p.items;
       delete p.order;
       changed=true;
     }
   });
-  if(changed){ await saveLeihlistePosten(); await savePhotos(); }
+  const dedupChanged=dedupeLeihlistePosten();
+  if(changed||dedupChanged){ await saveLeihlistePosten(); await savePhotos(); }
+}
+// Behebt bereits entstandene Duplikate (gleiche id mehrfach in leihlistePosten) —
+// z.B. wenn eine ältere Cloud-Sicherung frisch migrierte Fotos überschrieben hat und
+// migrateLeihlistePosten() dadurch ein zweites Mal für dieselbe id gelaufen ist.
+// Gegenstände aus Duplikaten werden übernommen (keine exakten Wiederholungen), damit
+// nichts verloren geht; danach bleibt pro id nur noch ein Posten übrig.
+function dedupeLeihlistePosten(){
+  const seen=new Map(); const deduped=[]; let changed=false;
+  for(const p of state.leihlistePosten){
+    if(seen.has(p.id)){
+      changed=true;
+      const kept=seen.get(p.id);
+      kept.items=kept.items||[];
+      (p.items||[]).forEach(item=>{
+        const dup=kept.items.some(k=>k.description===item.description&&k.quantity===item.quantity);
+        if(!dup) kept.items.push(item);
+      });
+      continue;
+    }
+    seen.set(p.id,p);
+    deduped.push(p);
+  }
+  if(changed) state.leihlistePosten=deduped;
+  return changed;
 }
 async function saveArbeitsplan(){try{await appStorage.set('arbeitsplan',JSON.stringify(state.arbeitsplan));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function saveSettings(){try{await appStorage.set('settings',JSON.stringify(state.settings));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
