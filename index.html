@@ -191,6 +191,10 @@
 
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  .undo-toast{bottom:66px;display:flex;align-items:center;gap:12px;padding:10px 10px 10px 16px;max-width:90vw}
+  .undo-toast button{background:#fff;color:var(--ink);border:none;padding:7px 14px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+  .undo-toast button:hover{background:#e8e8e8}
+  .undo-toast.show{pointer-events:auto}
 
   .toggle{display:flex;align-items:center;gap:10px;cursor:pointer}
   .toggle input{display:none}
@@ -320,6 +324,7 @@
 </div>
 <div id="modal-root"></div>
 <div id="toast" class="toast"></div>
+<div id="undo-toast" class="toast undo-toast"><span id="undo-toast-text"></span><button data-action="do-undo">Rückgängig</button></div>
 
 <script>
 /* ============================================================================
@@ -420,6 +425,35 @@ function toast(msg){
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>el.classList.remove('show'),2600);
 }
+/* ---------------------------- Rückgängig (Undo) ---------------------------- */
+const UNDO_WINDOW_MS=8000;
+let _undoState=null; // {undo, finalize, timer}
+function pushUndo(label,undoFn,finalizeFn){
+  finalizeUndo(); // eine vorherige, noch offene Undo-Aktion endgültig abschließen
+  const timer=setTimeout(finalizeUndo,UNDO_WINDOW_MS);
+  _undoState={undo:undoFn,finalize:finalizeFn,timer};
+  const el=document.getElementById('undo-toast');
+  document.getElementById('undo-toast-text').textContent=label;
+  el.classList.add('show');
+}
+function finalizeUndo(){
+  if(!_undoState) return;
+  clearTimeout(_undoState.timer);
+  const {finalize}=_undoState;
+  _undoState=null;
+  document.getElementById('undo-toast').classList.remove('show');
+  if(finalize) finalize();
+}
+async function triggerUndo(){
+  if(!_undoState) return;
+  clearTimeout(_undoState.timer);
+  const {undo}=_undoState;
+  _undoState=null;
+  document.getElementById('undo-toast').classList.remove('show');
+  await undo();
+  toast('Wiederhergestellt');
+}
+window.addEventListener('beforeunload',()=>{ if(_undoState&&_undoState.finalize) _undoState.finalize(); });
 function fmtDate(iso,opts){
   if(!iso) return '';
   const d=new Date(iso+'T00:00:00');
@@ -832,14 +866,19 @@ async function deletePhoto(id){
   const p=state.photos.find(x=>x.id===id); if(!p) return;
   if(!confirm('Dieses Foto wirklich löschen?')) return;
   state.photos=state.photos.filter(x=>x.id!==id);
-  await appStorage.delete('photoblob:'+id).catch(()=>{});
   await savePhotos();
-  if(dbxConnected() && p.dropboxPath){
-    dbxGetAccessToken().then(token=>fetch(`${DBX_API}/files/delete_v2`,{method:'POST',
-      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-      body:JSON.stringify({path:p.dropboxPath})})).catch(()=>{});
-  }
   render();
+  pushUndo('Foto gelöscht', async ()=>{
+    state.photos.push(p);
+    await savePhotos(); render();
+  }, ()=>{
+    appStorage.delete('photoblob:'+id).catch(()=>{});
+    if(dbxConnected() && p.dropboxPath){
+      dbxGetAccessToken().then(token=>fetch(`${DBX_API}/files/delete_v2`,{method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({path:p.dropboxPath})})).catch(()=>{});
+    }
+  });
 }
 async function getPhotoFullSrc(photo){
   try{ const r=await appStorage.get('photoblob:'+photo.id); if(r?.value) return r.value; }catch(e){}
@@ -1300,7 +1339,13 @@ function addDrehplanRow(dateOverride){
 }
 function deleteDrehplanRow(id){
   if(!confirm('Diese Drehplan-Zeile löschen?')) return;
-  state.drehplan=state.drehplan.filter(x=>x.id!==id); saveDrehplan(); render();
+  const idx=state.drehplan.findIndex(x=>x.id===id); if(idx===-1) return;
+  const [row]=state.drehplan.splice(idx,1);
+  saveDrehplan(); render();
+  pushUndo('Drehplan-Zeile gelöscht', async ()=>{
+    state.drehplan.splice(Math.min(idx,state.drehplan.length),0,row);
+    await saveDrehplan(); render();
+  });
 }
 
 /* ---------------------------- Arbeitsplan ---------------------------- */
@@ -1369,7 +1414,13 @@ function addArbeitsplanRow(dateOverride){
 }
 function deleteArbeitsplanRow(id){
   if(!confirm('Diese Arbeitsplan-Zeile löschen?')) return;
-  state.arbeitsplan=state.arbeitsplan.filter(x=>x.id!==id); saveArbeitsplan(); render();
+  const idx=state.arbeitsplan.findIndex(x=>x.id===id); if(idx===-1) return;
+  const [row]=state.arbeitsplan.splice(idx,1);
+  saveArbeitsplan(); render();
+  pushUndo('Arbeitsplan-Zeile gelöscht', async ()=>{
+    state.arbeitsplan.splice(Math.min(idx,state.arbeitsplan.length),0,row);
+    await saveArbeitsplan(); render();
+  });
 }
 function openFreiRangeForm(){
   openModal(`
@@ -1678,8 +1729,12 @@ function addContactRow(){
 }
 function delContactRow(idx){
   const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId); if(!mb) return;
-  mb.contacts.splice(idx,1);
+  const [contact]=mb.contacts.splice(idx,1); if(!contact) return;
   saveMotivblaetter(); render();
+  pushUndo(`Kontakt „${contact.name||'Ohne Namen'}" gelöscht`, async ()=>{
+    mb.contacts.splice(Math.min(idx,mb.contacts.length),0,contact);
+    await saveMotivblaetter(); render();
+  });
 }
 function addUntermotiv(){
   const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId); if(!mb) return;
@@ -1689,21 +1744,35 @@ function addUntermotiv(){
 function deleteUntermotiv(uidVal){
   if(!confirm('Dieses Untermotiv inkl. seiner Fotos löschen?')) return;
   const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId); if(!mb) return;
-  const photoIds=state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===uidVal).map(p=>p.id);
-  mb.untermotive=mb.untermotive.filter(x=>x.id!==uidVal);
+  const uIdx=mb.untermotive.findIndex(x=>x.id===uidVal); if(uIdx===-1) return;
+  const [u]=mb.untermotive.splice(uIdx,1);
+  const removedPhotos=state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===uidVal);
+  const photoIds=removedPhotos.map(p=>p.id);
   state.photos=state.photos.filter(p=>!(p.motivblattId===mb.id&&p.untermotivId===uidVal));
-  photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{}));
   saveMotivblaetter(); savePhotos(); render();
+  pushUndo(`Untermotiv „${u.title||'Ohne Namen'}" gelöscht`, async ()=>{
+    mb.untermotive.splice(Math.min(uIdx,mb.untermotive.length),0,u);
+    state.photos.push(...removedPhotos);
+    await saveMotivblaetter(); await savePhotos(); render();
+  }, ()=>{ photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{})); });
 }
 function deleteMotivblatt(id){
   if(!confirm('Dieses Motivblatt inkl. aller Fotos löschen?')) return;
-  const photoIds=state.photos.filter(p=>p.motivblattId===id).map(p=>p.id);
+  const mb=state.motivblaetter.find(x=>x.id===id); if(!mb) return;
+  const removedPhotos=state.photos.filter(p=>p.motivblattId===id);
+  const photoIds=removedPhotos.map(p=>p.id);
   state.motivblaetter=state.motivblaetter.filter(x=>x.id!==id);
   state.photos=state.photos.filter(p=>p.motivblattId!==id);
-  photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{}));
   saveMotivblaetter(); savePhotos();
   state.view='motivblaetter'; state.activeMotivblattId=null;
-  toast('Motivblatt gelöscht'); render();
+  render();
+  pushUndo(`Motivblatt „${mb.motivName||'Ohne Namen'}" gelöscht`, async ()=>{
+    state.motivblaetter.push(mb);
+    state.photos.push(...removedPhotos);
+    await saveMotivblaetter(); await savePhotos();
+    state.view='motivblatt-edit'; state.activeMotivblattId=mb.id;
+    render();
+  }, ()=>{ photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{})); });
 }
 
 async function openMotivblattPrint(id){
@@ -2138,18 +2207,32 @@ function addLeihlisteItem(photoId){
 }
 function deleteLeihlisteItem(photoId,itemId){
   const p=state.photos.find(x=>x.id===photoId); if(!p) return;
-  p.items=(p.items||[]).filter(x=>x.id!==itemId);
+  const idx=(p.items||[]).findIndex(x=>x.id===itemId); if(idx===-1) return;
+  const [item]=p.items.splice(idx,1);
   savePhotos(); render();
+  pushUndo(`Gegenstand „${item.description||'Ohne Bezeichnung'}" gelöscht`, async ()=>{
+    p.items=p.items||[];
+    p.items.splice(Math.min(idx,p.items.length),0,item);
+    await savePhotos(); render();
+  });
 }
 function deleteLeihliste(id){
   if(!confirm('Diese Leihliste inkl. aller Fotos und Gegenstände löschen?')) return;
-  const photoIds=state.photos.filter(p=>p.leihlisteId===id).map(p=>p.id);
+  const ll=state.leihlisten.find(x=>x.id===id); if(!ll) return;
+  const removedPhotos=state.photos.filter(p=>p.leihlisteId===id);
+  const photoIds=removedPhotos.map(p=>p.id);
   state.leihlisten=state.leihlisten.filter(x=>x.id!==id);
   state.photos=state.photos.filter(p=>p.leihlisteId!==id);
-  photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{}));
   saveLeihlisten(); savePhotos();
   state.view='leihlisten'; state.activeLeihlisteId=null;
-  toast('Leihliste gelöscht'); render();
+  render();
+  pushUndo(`Leihliste „${ll.title||'Ohne Titel'}" gelöscht`, async ()=>{
+    state.leihlisten.push(ll);
+    state.photos.push(...removedPhotos);
+    await saveLeihlisten(); await savePhotos();
+    state.view='leihliste-edit'; state.activeLeihlisteId=ll.id;
+    render();
+  }, ()=>{ photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{})); });
 }
 
 async function openLeihlistePrint(id){
@@ -2391,14 +2474,24 @@ async function saveSupplierForm(id){
 }
 function deleteSupplier(id){
   if(!confirm('Diesen Zulieferer inkl. aller Termine und Fotos löschen?')) return;
-  const photoIds=state.photos.filter(p=>p.supplierId===id).map(p=>p.id);
+  const supplier=state.suppliers.find(x=>x.id===id); if(!supplier) return;
+  const removedAppts=state.appointments.filter(a=>a.supplierId===id);
+  const removedPhotos=state.photos.filter(p=>p.supplierId===id);
+  const photoIds=removedPhotos.map(p=>p.id);
   state.suppliers=state.suppliers.filter(x=>x.id!==id);
   state.appointments=state.appointments.filter(a=>a.supplierId!==id);
   state.photos=state.photos.filter(p=>p.supplierId!==id);
-  photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{}));
   saveSuppliers(); saveAppointments(); savePhotos();
   state.view='suppliers'; state.activeSupplierId=null;
-  toast('Zulieferer gelöscht'); render();
+  render();
+  pushUndo(`Zulieferer „${supplier.name||'Ohne Namen'}" gelöscht`, async ()=>{
+    state.suppliers.push(supplier);
+    state.appointments.push(...removedAppts);
+    state.photos.push(...removedPhotos);
+    await saveSuppliers(); await saveAppointments(); await savePhotos();
+    state.view='supplier-detail'; state.activeSupplierId=supplier.id;
+    render();
+  }, ()=>{ photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{})); });
 }
 
 function openApptForm(id,defaults={}){
@@ -2452,8 +2545,13 @@ async function saveApptForm(id){
 }
 function deleteAppt(id){
   if(!confirm('Diesen Termin löschen?')) return;
+  const appt=state.appointments.find(x=>x.id===id); if(!appt) return;
   state.appointments=state.appointments.filter(x=>x.id!==id);
-  saveAppointments(); toast('Termin gelöscht'); render();
+  saveAppointments(); render();
+  pushUndo(`Termin „${appt.title||'Ohne Titel'}" gelöscht`, async ()=>{
+    state.appointments.push(appt);
+    await saveAppointments(); render();
+  });
 }
 
 function openDayModal(iso){
@@ -2583,6 +2681,7 @@ document.addEventListener('click', async (e)=>{
     case 'noop': break;
     case 'modal-bg-close': closeModal(); break;
     case 'close-modal': closeModal(); break;
+    case 'do-undo': await triggerUndo(); break;
     case 'set-view': setView(t.dataset.view); break;
     case 'open-supplier': openSupplierDetail(t.dataset.id); break;
     case 'new-supplier': openSupplierForm(null); break;
