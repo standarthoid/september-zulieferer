@@ -266,7 +266,8 @@
   .ll-photo-entry{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg-card);margin-bottom:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;transition:opacity .15s,border-color .15s}
   .ll-photo-entry.dragging{opacity:.4}
   .ll-photo-entry.drag-over{border-color:var(--green);background:var(--green-soft)}
-  .ll-drag-handle{width:20px;flex:none;color:var(--ink-muted);cursor:grab;display:flex;align-items:center;justify-content:center;align-self:stretch;touch-action:none}
+  .ll-drag-col{width:22px;flex:none;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:8px}
+  .ll-drag-handle{color:var(--ink-muted);cursor:grab;display:flex;align-items:center;justify-content:center;flex:1;touch-action:none}
   .ll-drag-handle:active{cursor:grabbing}
   .ll-drag-handle .icon{width:18px;height:18px}
   .pcrop-badge{position:absolute;bottom:4px;left:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center}
@@ -274,11 +275,21 @@
   .zoom-viewport{width:100%;max-width:340px;height:340px;margin:0 auto;overflow:hidden;position:relative;background:#111;border-radius:8px;touch-action:none;cursor:grab}
   .zoom-viewport:active{cursor:grabbing}
   .zoom-viewport img{position:absolute;top:0;left:0;user-select:none;-webkit-user-drag:none;max-width:none}
-  .ll-photo-entry .ll-thumb-col{width:140px;flex:none}
-  .ll-photo-entry .ll-thumb-col .photo-thumb{width:140px;height:140px}
+  .ll-photo-entry .ll-thumb-col{width:206px;flex:none}
+  .ll-photo-strip{display:flex;flex-wrap:wrap;gap:6px}
+  .ll-photo-entry .ll-thumb-col .photo-thumb{width:96px;height:96px}
+  .ll-zoom-mini{position:absolute;bottom:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;opacity:0;border:none;padding:0;cursor:pointer}
+  .ll-zoom-mini .icon{width:12px;height:12px}
+  .ll-swap-mini{position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;opacity:0;border:none;padding:0;cursor:pointer}
+  .ll-swap-mini .icon{width:12px;height:12px}
+  .photo-thumb:hover .ll-zoom-mini,.photo-thumb:hover .ll-swap-mini{opacity:1}
+  .ll-add-photo-btn{width:96px;height:96px;border:1.5px dashed var(--line-strong);border-radius:10px;background:var(--bg-sunk);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--ink-muted);cursor:pointer;font-size:10px}
+  .ll-add-photo-btn:hover{border-color:var(--ink)}
+  .ll-add-photo-btn .icon{width:16px;height:16px}
   .ll-photo-entry .ll-items-col{flex:1;min-width:220px}
   .ll-item-row{display:grid;grid-template-columns:1fr 90px auto;gap:6px;margin-bottom:6px;align-items:center}
   .ll-item-row input{border:1px solid var(--line-strong);background:var(--bg-card);border-radius:8px;padding:6px 8px;font:inherit}
+  .ll-item-row input[data-item-field="quantity"]{text-align:right}
   .ll-print-wrap{background:#e9edf0;padding:24px 0;min-height:100vh}
   .ll-sheet{width:210mm;max-width:94vw;min-height:297mm;margin:0 auto 24px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.15);padding:14mm 12mm;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;color:#1a1a1a}
   .ll-sheet h1{font-size:26px;margin:0 0 4px}
@@ -525,7 +536,7 @@ const SEED_ARBEITSPLAN = [{"person": "Barbara", "date": "2026-08-18", "status": 
 const state = {
   view:'dashboard',
   calMonth:new Date(2026,8,1),
-  suppliers:[], appointments:[], photos:[], drehplan:[], arbeitsplan:[], motivblaetter:[], leihlisten:[],
+  suppliers:[], appointments:[], photos:[], drehplan:[], arbeitsplan:[], motivblaetter:[], leihlisten:[], leihlistePosten:[],
   settings:{...DEFAULT_SETTINGS},
   loading:true,
   activeSupplierId:null, activeMotivblattId:null, printMotivblattId:null, activeLeihlisteId:null, printLeihlisteId:null,
@@ -543,6 +554,8 @@ async function loadAll(){
   try{const r=await appStorage.get('arbeitsplan');if(r?.value)state.arbeitsplan=JSON.parse(r.value);}catch(e){state.arbeitsplan=[];}
   try{const r=await appStorage.get('motivblaetter');if(r?.value)state.motivblaetter=JSON.parse(r.value);}catch(e){state.motivblaetter=[];}
   try{const r=await appStorage.get('leihlisten');if(r?.value)state.leihlisten=JSON.parse(r.value);}catch(e){state.leihlisten=[];}
+  try{const r=await appStorage.get('leihlistePosten');if(r?.value)state.leihlistePosten=JSON.parse(r.value);}catch(e){state.leihlistePosten=[];}
+  await migrateLeihlistePosten();
   // Erststart: Drehplan/Arbeitsplan mit extrahierten Daten befüllen, falls noch leer
   if(state.drehplan.length===0 && typeof SEED_DREHPLAN!=='undefined' && SEED_DREHPLAN.length){
     state.drehplan=SEED_DREHPLAN.map(d=>({id:uid(),...d}));
@@ -570,6 +583,26 @@ async function savePhotos(){try{await appStorage.set('photos',JSON.stringify(sta
 async function saveDrehplan(){try{await appStorage.set('drehplan',JSON.stringify(state.drehplan));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function saveMotivblaetter(){try{await appStorage.set('motivblaetter',JSON.stringify(state.motivblaetter));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function saveLeihlisten(){try{await appStorage.set('leihlisten',JSON.stringify(state.leihlisten));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+async function saveLeihlistePosten(){try{await appStorage.set('leihlistePosten',JSON.stringify(state.leihlistePosten));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+// Migration: früher war jedes Leihlisten-Foto zugleich der "Posten" (Foto + eigene
+// Gegenstandsliste direkt am Foto). Jetzt kann ein Posten mehrere Fotos enthalten
+// (z.B. Vorder-/Rückseite) — dafür wandern Gegenstandsliste + Reihenfolge auf einen
+// eigenen Posten-Datensatz, das Foto bekommt nur noch eine postenId. Diese Funktion
+// holt alte Fotos ohne postenId nachträglich in einen (neu erzeugten) Posten.
+async function migrateLeihlistePosten(){
+  let changed=false;
+  state.photos.forEach(p=>{
+    if(p.leihlisteId && !p.postenId){
+      const posten={id:p.id, leihlisteId:p.leihlisteId, order:p.order!=null?p.order:0, items:p.items||[]};
+      state.leihlistePosten.push(posten);
+      p.postenId=posten.id;
+      delete p.items;
+      delete p.order;
+      changed=true;
+    }
+  });
+  if(changed){ await saveLeihlistePosten(); await savePhotos(); }
+}
 async function saveArbeitsplan(){try{await appStorage.set('arbeitsplan',JSON.stringify(state.arbeitsplan));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function saveSettings(){try{await appStorage.set('settings',JSON.stringify(state.settings));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 
@@ -673,7 +706,7 @@ function dbxBuildPayload(){
   return {
     format:'sep_zulieferer_sync_v1', savedAt:new Date().toISOString(),
     device:navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Mac')?'Mac':navigator.userAgent.includes('Android')?'Android':'Browser',
-    suppliers:state.suppliers, appointments:state.appointments, photos:state.photos, drehplan:state.drehplan, arbeitsplan:state.arbeitsplan, motivblaetter:state.motivblaetter, leihlisten:state.leihlisten,
+    suppliers:state.suppliers, appointments:state.appointments, photos:state.photos, drehplan:state.drehplan, arbeitsplan:state.arbeitsplan, motivblaetter:state.motivblaetter, leihlisten:state.leihlisten, leihlistePosten:state.leihlistePosten,
     // Nur die nicht-sensiblen Anzeige-Einstellungen mitsynchronisieren, niemals die Dropbox-Zugangsdaten selbst
     settings:{ companyLogo:state.settings.companyLogo, headerPattern:state.settings.headerPattern, defaultProjectTitle:state.settings.defaultProjectTitle, motivblattStyle:state.settings.motivblattStyle },
   };
@@ -713,13 +746,15 @@ async function dbxLoadFromCloud(){
     if(Array.isArray(data.arbeitsplan)) state.arbeitsplan=data.arbeitsplan;
     if(Array.isArray(data.motivblaetter)) state.motivblaetter=data.motivblaetter;
     if(Array.isArray(data.leihlisten)) state.leihlisten=data.leihlisten;
+    if(Array.isArray(data.leihlistePosten)) state.leihlistePosten=data.leihlistePosten;
     if(data.settings){
       if(data.settings.companyLogo!=null) state.settings.companyLogo=data.settings.companyLogo;
       if(data.settings.headerPattern!=null) state.settings.headerPattern=data.settings.headerPattern;
       if(data.settings.defaultProjectTitle!=null) state.settings.defaultProjectTitle=data.settings.defaultProjectTitle;
       if(data.settings.motivblattStyle!=null) state.settings.motivblattStyle={...DEFAULT_MB_STYLE,...data.settings.motivblattStyle};
     }
-    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter(); await saveLeihlisten(); await saveSettings();
+    await migrateLeihlistePosten();
+    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter(); await saveLeihlisten(); await saveLeihlistePosten(); await saveSettings();
     state.dbx.lastSync=new Date().toISOString(); state.dbx.syncStatus='idle'; updateSyncIndicator();
     return true;
   }catch(e){ state.dbx.syncStatus='error'; state.dbx.lastError=e.message; updateSyncIndicator(); return false; }
@@ -830,7 +865,7 @@ async function addPhotos(files,meta={}){
         id, caption:'', thumb:thumbDataURL, mime:'image/jpeg', uploadedAt:new Date().toISOString(), dropboxPath:null,
         supplierId:meta.supplierId||null, appointmentId:meta.appointmentId||null,
         motivblattId:meta.motivblattId||null, untermotivId:meta.untermotivId||null,
-        leihlisteId:meta.leihlisteId||null, items:[], // Gegenstände+Anzahl bei Leihlisten-Fotos
+        leihlisteId:meta.leihlisteId||null, postenId:meta.postenId||null, // Posten = Gruppe mehrerer Fotos + Gegenstandsliste bei Leihlisten
         printSize:1, // Anzeigegröße im Motivblatt-Ausdruck: 1=Normal, 2=Groß, 3=Sehr groß
       };
       state.photos.push(photo);
@@ -879,6 +914,42 @@ async function deletePhoto(id){
         body:JSON.stringify({path:p.dropboxPath})})).catch(()=>{});
     }
   });
+}
+// Tauscht nur das Bild eines vorhandenen Fotos aus (gleiche id, gleiche Position),
+// z.B. wenn sich ein besseres Foto für einen Gegenstand findet — ohne dass die dazu
+// bereits erfasste Gegenstandsliste (die am Posten hängt) neu eingetragen werden muss.
+function replacePhoto(photoId){
+  const p=state.photos.find(x=>x.id===photoId); if(!p) return;
+  const input=document.createElement('input');
+  input.type='file'; input.accept='image/*';
+  input.addEventListener('change', async ()=>{
+    const file=input.files[0]; if(!file) return;
+    if(isHeicFile(file)){ toast('HEIC-Format wird von Chrome nicht unterstützt — im Handy auf "Kompatibel"/JPEG umstellen'); return; }
+    if(!file.type.startsWith('image/')){ toast('Datei konnte nicht gelesen werden'); return; }
+    try{
+      const fullBlob=await compressImage(file,1600,0.82);
+      const thumbBlob=await compressImage(file,320,0.68);
+      const thumbDataURL=await blobToBase64(thumbBlob);
+      await appStorage.set('photoblob:'+p.id, await blobToBase64(fullBlob));
+      p.thumb=thumbDataURL;
+      delete p.cropRect;
+      const oldDropboxPath=p.dropboxPath;
+      p.dropboxPath=null;
+      await savePhotos();
+      if(dbxConnected()){
+        const path=(state.settings.dbxPhotosFolder||'/fotos')+'/'+p.id+'.jpg';
+        dbxUploadBinary(path,fullBlob).then(()=>{ p.dropboxPath=path; savePhotos(); updateSyncIndicator(); })
+          .catch(err=>{ console.warn('Foto-Sync fehlgeschlagen',err); });
+        if(oldDropboxPath){
+          dbxGetAccessToken().then(token=>fetch(`${DBX_API}/files/delete_v2`,{method:'POST',
+            headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+            body:JSON.stringify({path:oldDropboxPath})})).catch(()=>{});
+        }
+      }
+      toast('Foto ausgetauscht'); render();
+    }catch(e){ console.warn('Foto konnte nicht ersetzt werden',e); toast('Foto konnte nicht gelesen werden'); }
+  });
+  input.click();
 }
 async function getPhotoFullSrc(photo){
   try{ const r=await appStorage.get('photoblob:'+photo.id); if(r?.value) return r.value; }catch(e){}
@@ -1918,11 +1989,12 @@ function renderLeihlisten(){
   `;
 }
 function renderLeihlisteCard(ll){
+  const posten=state.leihlistePosten.filter(x=>x.leihlisteId===ll.id);
   const photos=state.photos.filter(p=>p.leihlisteId===ll.id);
-  const itemCount=photos.reduce((n,p)=>n+(p.items||[]).length,0);
+  const itemCount=posten.reduce((n,ps)=>n+(ps.items||[]).length,0);
   return `<div class="ll-card" data-action="edit-leihliste" data-id="${ll.id}">
     <div class="llname">${escapeHtml(ll.title||'(ohne Titel)')}</div>
-    <div class="llmeta">${photos.length} Foto${photos.length===1?'':'s'} · ${itemCount} Gegenstand/Gegenstände</div>
+    <div class="llmeta">${posten.length} Posten · ${photos.length} Foto${photos.length===1?'':'s'} · ${itemCount} Gegenstand/Gegenstände</div>
     <div class="row" style="gap:6px;margin-top:6px">
       <button class="btn btn-sm" data-action="print-leihliste" data-id="${ll.id}">${ic('download')} Als PDF</button>
       <button class="btn btn-sm" data-action="checklist-leihliste" data-id="${ll.id}">${ic('check2')} Checkliste</button>
@@ -1946,7 +2018,7 @@ function renderLeihlisteEdit(){
   const el=document.getElementById('view-leihliste-edit');
   const ll=state.leihlisten.find(x=>x.id===state.activeLeihlisteId);
   if(!ll){ el.innerHTML=`<div class="empty">Leihliste nicht gefunden</div>`; return; }
-  const photos=sortLeihlistePhotos(state.photos.filter(p=>p.leihlisteId===ll.id));
+  const posten=sortLeihlistePosten(state.leihlistePosten.filter(x=>x.leihlisteId===ll.id));
   el.innerHTML=`
     <div class="row between" style="margin-bottom:10px">
       <button class="btn btn-ghost btn-sm" data-action="set-view" data-view="leihlisten">${ic('back')} Zurück</button>
@@ -1960,39 +2032,48 @@ function renderLeihlisteEdit(){
       <div class="field"><label>Titel *</label><input id="llf-title" value="${escapeAttr(ll.title||'')}" placeholder="z.B. Leihliste Requisiten Müller GmbH"></div>
       <div class="field"><label>Notizen (optional)</label><textarea id="llf-notes" rows="2">${escapeHtml(ll.notes||'')}</textarea></div>
     </div>
-    <div class="row between" style="margin:0 0 10px"><h3 style="font-size:15px">Fotos &amp; Gegenstände</h3></div>
+    <div class="row between" style="margin:0 0 10px"><h3 style="font-size:15px">Posten (Fotos &amp; Gegenstände)</h3></div>
     <div class="drop-zone" id="ll-drop" style="margin-bottom:12px">
-      ${ic('camera')}<div style="margin-top:4px;font-size:12.5px">Foto hierher ziehen oder klicken — jedes Foto bekommt seine eigene Gegenstandsliste</div>
+      ${ic('camera')}<div style="margin-top:4px;font-size:12.5px">Foto(s) hierher ziehen oder klicken — jedes Foto wird ein eigener Posten mit eigener Gegenstandsliste. Weitere Fotos zu einem Posten (z.B. Rückseite) lassen sich direkt bei diesem Posten ergänzen.</div>
       <input type="file" id="ll-photo-file" accept="image/*" multiple style="display:none">
     </div>
-    <div id="ll-entries">${photos.map(renderLeihlistePhotoEntry).join('')}</div>
-    ${photos.length?'':`<div class="empty" style="padding:20px">Noch keine Fotos hinzugefügt</div>`}
+    <div id="ll-entries">${posten.map(renderLeihlistePosten).join('')}</div>
+    ${posten.length?'':`<div class="empty" style="padding:20px">Noch keine Posten hinzugefügt</div>`}
   `;
   bindLeihlisteEditEvents(ll);
 }
-function renderLeihlistePhotoEntry(p){
-  const items=p.items||[];
-  return `<div class="ll-photo-entry" draggable="true" data-photo-id="${p.id}">
-    <div class="ll-drag-handle" title="Ziehen, um Reihenfolge zu ändern">${ic('drag')}</div>
+function renderLeihlistePosten(posten){
+  const photos=state.photos.filter(p=>p.postenId===posten.id);
+  const items=posten.items||[];
+  return `<div class="ll-photo-entry" draggable="true" data-posten-id="${posten.id}">
+    <div class="ll-drag-col">
+      <div class="ll-drag-handle" title="Ziehen, um Reihenfolge zu ändern">${ic('drag')}</div>
+      <button class="iconbtn btn-sm btn-danger" data-action="del-posten" data-posten-id="${posten.id}" title="Gesamten Posten löschen">${ic('trash')}</button>
+    </div>
     <div class="ll-thumb-col">
-      <div class="photo-thumb" data-action="open-photo" data-id="${p.id}">
-        <img src="${p.thumb}" loading="lazy">
-        <button class="pdel" data-action="del-photo" data-id="${p.id}" title="Foto löschen">${ic('close')}</button>
-        ${p.cropRect?`<span class="pcrop-badge" title="Ausschnitt gesetzt">${ic('zoom')}</span>`:''}
+      <div class="ll-photo-strip">
+        ${photos.map(p=>`
+          <div class="photo-thumb ll-photo-thumb" data-action="open-photo" data-id="${p.id}">
+            <img src="${p.thumb}" loading="lazy">
+            <button class="pdel" data-action="del-photo" data-id="${p.id}" title="Foto löschen">${ic('close')}</button>
+            <button class="ll-swap-mini" data-action="replace-photo" data-id="${p.id}" title="Foto austauschen, ohne Gegenstände neu einzutragen">${ic('sync')}</button>
+            <button class="ll-zoom-mini" data-action="zoom-photo" data-id="${p.id}" title="Zoomen">${ic('zoom')}</button>
+            ${p.cropRect?`<span class="pcrop-badge" title="Ausschnitt gesetzt">${ic('zoom')}</span>`:''}
+          </div>`).join('')}
+        <button class="ll-add-photo-btn" data-action="add-photo-to-posten" data-posten-id="${posten.id}" title="Weiteres Foto hinzufügen, z.B. Rückseite">${ic('plus')}<span>Foto</span></button>
       </div>
-      <button class="btn btn-sm btn-block" style="margin-top:6px" data-action="zoom-photo" data-id="${p.id}">${ic('zoom')} Zoomen</button>
     </div>
     <div class="ll-items-col">
-      <div id="ll-items-${p.id}">${items.map(i=>renderLeihlisteItemRow(p.id,i)).join('')}</div>
-      <button class="btn btn-sm" data-action="add-ll-item" data-photo-id="${p.id}">${ic('plus')} Gegenstand hinzufügen</button>
+      <div id="ll-items-${posten.id}">${items.map(i=>renderLeihlisteItemRow(posten.id,i)).join('')}</div>
+      <button class="btn btn-sm" data-action="add-ll-item" data-posten-id="${posten.id}">${ic('plus')} Gegenstand hinzufügen</button>
     </div>
   </div>`;
 }
-function renderLeihlisteItemRow(photoId,item){
+function renderLeihlisteItemRow(postenId,item){
   return `<div class="ll-item-row" data-item-id="${item.id}">
-    <input data-item-field="description" data-photo-id="${photoId}" value="${escapeAttr(item.description||'')}" placeholder="Gegenstand, z.B. Vase groß">
-    <input data-item-field="quantity" data-photo-id="${photoId}" value="${escapeAttr(item.quantity||'')}" placeholder="Anzahl">
-    <button class="iconbtn btn-sm btn-danger" data-action="del-ll-item" data-photo-id="${photoId}" data-item-id="${item.id}" title="Entfernen">${ic('trash')}</button>
+    <input data-item-field="description" data-posten-id="${postenId}" value="${escapeAttr(item.description||'')}" placeholder="Gegenstand, z.B. Vase groß">
+    <input data-item-field="quantity" data-posten-id="${postenId}" value="${escapeAttr(item.quantity||'')}" placeholder="Anzahl">
+    <button class="iconbtn btn-sm btn-danger" data-action="del-ll-item" data-posten-id="${postenId}" data-item-id="${item.id}" title="Entfernen">${ic('trash')}</button>
   </div>`;
 }
 function bindLeihlisteEditEvents(ll){
@@ -2003,11 +2084,11 @@ function bindLeihlisteEditEvents(ll){
 
   document.querySelectorAll('#ll-entries [data-item-field]').forEach(inp=>{
     inp.addEventListener('input',()=>{
-      const photo=state.photos.find(x=>x.id===inp.dataset.photoId); if(!photo) return;
+      const posten=state.leihlistePosten.find(x=>x.id===inp.dataset.postenId); if(!posten) return;
       const row=inp.closest('[data-item-id]');
-      const item=(photo.items||[]).find(x=>x.id===row.dataset.itemId); if(!item) return;
+      const item=(posten.items||[]).find(x=>x.id===row.dataset.itemId); if(!item) return;
       item[inp.dataset.itemField]=inp.value;
-      debouncedSavePhotos();
+      debouncedSaveLeihlistePosten();
     });
   });
 
@@ -2017,7 +2098,7 @@ function bindLeihlisteEditEvents(ll){
     zone.addEventListener('click',()=>fileInp.click());
     fileInp.addEventListener('change',async e=>{
       const files=Array.from(e.target.files);
-      if(files.length){ const added=await addPhotos(files,{leihlisteId:ll.id}); photoUploadToast(added); render(); }
+      if(files.length) await addPhotosAsNewPosten(files,ll.id);
       fileInp.value='';
     });
     zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
@@ -2025,48 +2106,105 @@ function bindLeihlisteEditEvents(ll){
     zone.addEventListener('drop',async e=>{
       e.preventDefault(); zone.classList.remove('drag');
       const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
-      if(files.length){ const added=await addPhotos(files,{leihlisteId:ll.id}); photoUploadToast(added); render(); }
+      if(files.length) await addPhotosAsNewPosten(files,ll.id);
     });
   }
 
   let dragSrcId=null;
   document.querySelectorAll('#ll-entries .ll-photo-entry').forEach(entry=>{
     entry.addEventListener('dragstart',e=>{
-      dragSrcId=entry.dataset.photoId;
+      dragSrcId=entry.dataset.postenId;
       entry.classList.add('dragging');
       e.dataTransfer.effectAllowed='move';
       try{ e.dataTransfer.setData('text/plain', dragSrcId); }catch(err){}
     });
     entry.addEventListener('dragend',()=>{ entry.classList.remove('dragging'); });
-    entry.addEventListener('dragover',e=>{ e.preventDefault(); if(entry.dataset.photoId!==dragSrcId) entry.classList.add('drag-over'); });
+    entry.addEventListener('dragover',e=>{ e.preventDefault(); if(entry.dataset.postenId!==dragSrcId) entry.classList.add('drag-over'); });
     entry.addEventListener('dragleave',()=>{ entry.classList.remove('drag-over'); });
     entry.addEventListener('drop',e=>{
       e.preventDefault(); entry.classList.remove('drag-over');
-      const targetId=entry.dataset.photoId;
+      const targetId=entry.dataset.postenId;
       if(!dragSrcId||dragSrcId===targetId) return;
-      reorderLeihlistePhotos(ll.id,dragSrcId,targetId);
+      reorderLeihlistePosten(ll.id,dragSrcId,targetId);
     });
   });
 }
-function sortLeihlistePhotos(photos){
-  return photos.slice().sort((a,b)=>{
+function sortLeihlistePosten(posten){
+  return posten.slice().sort((a,b)=>{
     const ao=a.order,bo=b.order;
     if(ao!=null&&bo!=null) return ao-bo;
     if(ao!=null) return -1;
     if(bo!=null) return 1;
-    return (a.uploadedAt||'').localeCompare(b.uploadedAt||'');
+    return (a.id||'').localeCompare(b.id||'');
   });
 }
-function reorderLeihlistePhotos(leihlisteId,srcId,targetId){
-  const photos=sortLeihlistePhotos(state.photos.filter(p=>p.leihlisteId===leihlisteId));
-  const srcIdx=photos.findIndex(p=>p.id===srcId);
-  const targetIdx=photos.findIndex(p=>p.id===targetId);
+function reorderLeihlistePosten(leihlisteId,srcId,targetId){
+  const posten=sortLeihlistePosten(state.leihlistePosten.filter(x=>x.leihlisteId===leihlisteId));
+  const srcIdx=posten.findIndex(p=>p.id===srcId);
+  const targetIdx=posten.findIndex(p=>p.id===targetId);
   if(srcIdx===-1||targetIdx===-1) return;
-  const [moved]=photos.splice(srcIdx,1);
-  photos.splice(targetIdx,0,moved);
-  photos.forEach((p,i)=>{ p.order=i; });
-  savePhotos();
+  const [moved]=posten.splice(srcIdx,1);
+  posten.splice(targetIdx,0,moved);
+  posten.forEach((p,i)=>{ p.order=i; });
+  saveLeihlistePosten();
   render();
+}
+function nextLeihlistePostenOrder(leihlisteId){
+  const existing=state.leihlistePosten.filter(x=>x.leihlisteId===leihlisteId);
+  return existing.length?Math.max(...existing.map(x=>x.order||0))+1:0;
+}
+// Jedes ausgewählte/abgelegte Foto in der Haupt-Dropzone wird ein eigener, neuer
+// Posten (bisheriges Verhalten). Für ein zusätzliches Foto INNERHALB eines
+// bestehenden Postens (z.B. Rückseite) siehe addPhotoToPosten().
+async function addPhotosAsNewPosten(files,leihlisteId){
+  const allAdded=[]; const skippedHeic=[]; const skippedOther=[];
+  let order=nextLeihlistePostenOrder(leihlisteId);
+  let createdAny=false;
+  for(const file of files){
+    const postenId=uid();
+    const result=await addPhotos([file],{leihlisteId,postenId});
+    if(result.length){
+      state.leihlistePosten.push({id:postenId,leihlisteId,order:order++,items:[]});
+      createdAny=true;
+    }
+    allAdded.push(...result);
+    skippedHeic.push(...result.skippedHeic);
+    skippedOther.push(...result.skippedOther);
+  }
+  if(createdAny) await saveLeihlistePosten();
+  allAdded.skippedHeic=skippedHeic; allAdded.skippedOther=skippedOther;
+  photoUploadToast(allAdded);
+  render();
+}
+// Fügt einem bestehenden Posten ein weiteres Foto hinzu (z.B. Rückseite),
+// ohne einen neuen Posten bzw. eine neue Gegenstandsliste anzulegen.
+function addPhotoToPosten(postenId){
+  const posten=state.leihlistePosten.find(x=>x.id===postenId); if(!posten) return;
+  const input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.multiple=true;
+  input.addEventListener('change', async ()=>{
+    const files=Array.from(input.files);
+    if(files.length){
+      const added=await addPhotos(files,{leihlisteId:posten.leihlisteId,postenId});
+      photoUploadToast(added);
+      render();
+    }
+  });
+  input.click();
+}
+function deleteLeihlistePosten(postenId){
+  if(!confirm('Diesen Posten inkl. aller Fotos und Gegenstände löschen?')) return;
+  const idx=state.leihlistePosten.findIndex(x=>x.id===postenId); if(idx===-1) return;
+  const [posten]=state.leihlistePosten.splice(idx,1);
+  const removedPhotos=state.photos.filter(p=>p.postenId===postenId);
+  const photoIds=removedPhotos.map(p=>p.id);
+  state.photos=state.photos.filter(p=>p.postenId!==postenId);
+  saveLeihlistePosten(); savePhotos(); render();
+  pushUndo('Posten gelöscht', async ()=>{
+    state.leihlistePosten.splice(Math.min(idx,state.leihlistePosten.length),0,posten);
+    state.photos.push(...removedPhotos);
+    await saveLeihlistePosten(); await savePhotos(); render();
+  }, ()=>{ photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{})); });
 }
 
 /* ---------------------------- Foto-Zoom/Zuschnitt ---------------------------- */
@@ -2200,36 +2338,40 @@ async function getPhotoDisplaySrc(photo,targetSize){
   });
 }
 const debouncedSaveLeihlisten=debounce(()=>saveLeihlisten(),700);
-function addLeihlisteItem(photoId){
-  const p=state.photos.find(x=>x.id===photoId); if(!p) return;
+const debouncedSaveLeihlistePosten=debounce(()=>saveLeihlistePosten(),700);
+function addLeihlisteItem(postenId){
+  const p=state.leihlistePosten.find(x=>x.id===postenId); if(!p) return;
   p.items=p.items||[]; p.items.push({id:uid(),description:'',quantity:'1'});
-  savePhotos(); render();
+  saveLeihlistePosten(); render();
 }
-function deleteLeihlisteItem(photoId,itemId){
-  const p=state.photos.find(x=>x.id===photoId); if(!p) return;
+function deleteLeihlisteItem(postenId,itemId){
+  const p=state.leihlistePosten.find(x=>x.id===postenId); if(!p) return;
   const idx=(p.items||[]).findIndex(x=>x.id===itemId); if(idx===-1) return;
   const [item]=p.items.splice(idx,1);
-  savePhotos(); render();
+  saveLeihlistePosten(); render();
   pushUndo(`Gegenstand „${item.description||'Ohne Bezeichnung'}" gelöscht`, async ()=>{
     p.items=p.items||[];
     p.items.splice(Math.min(idx,p.items.length),0,item);
-    await savePhotos(); render();
+    await saveLeihlistePosten(); render();
   });
 }
 function deleteLeihliste(id){
   if(!confirm('Diese Leihliste inkl. aller Fotos und Gegenstände löschen?')) return;
   const ll=state.leihlisten.find(x=>x.id===id); if(!ll) return;
+  const removedPosten=state.leihlistePosten.filter(x=>x.leihlisteId===id);
   const removedPhotos=state.photos.filter(p=>p.leihlisteId===id);
   const photoIds=removedPhotos.map(p=>p.id);
   state.leihlisten=state.leihlisten.filter(x=>x.id!==id);
+  state.leihlistePosten=state.leihlistePosten.filter(x=>x.leihlisteId!==id);
   state.photos=state.photos.filter(p=>p.leihlisteId!==id);
-  saveLeihlisten(); savePhotos();
+  saveLeihlisten(); saveLeihlistePosten(); savePhotos();
   state.view='leihlisten'; state.activeLeihlisteId=null;
   render();
   pushUndo(`Leihliste „${ll.title||'Ohne Titel'}" gelöscht`, async ()=>{
     state.leihlisten.push(ll);
+    state.leihlistePosten.push(...removedPosten);
     state.photos.push(...removedPhotos);
-    await saveLeihlisten(); await savePhotos();
+    await saveLeihlisten(); await saveLeihlistePosten(); await savePhotos();
     state.view='leihliste-edit'; state.activeLeihlisteId=ll.id;
     render();
   }, ()=>{ photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{})); });
@@ -2260,7 +2402,7 @@ function renderLeihlistePrint(){
   const el=document.getElementById('view-leihliste-print');
   const ll=state.leihlisten.find(x=>x.id===state.printLeihlisteId);
   if(!ll){ el.innerHTML=`<div class="empty">Leihliste nicht gefunden</div>`; return; }
-  const photos=sortLeihlistePhotos(state.photos.filter(p=>p.leihlisteId===ll.id));
+  const posten=sortLeihlistePosten(state.leihlistePosten.filter(x=>x.leihlisteId===ll.id));
   const notesHtml=`${ll.notes?`<div class="mb-label">Notizen:</div><div>${escapeHtml(ll.notes)}</div>`:''}<div class="mb-label" style="margin-top:${ll.notes?'10px':'0'}">Stand: ${escapeHtml(fmtDate(todayISO()))}</div>`;
   el.innerHTML=`
     <div class="mb-print-wrap">
@@ -2270,17 +2412,25 @@ function renderLeihlistePrint(){
       </div>
       <div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
         ${mbSheetHeaderHTML('Leihliste: '+(ll.title||''),notesHtml)}
-        ${photos.map(p=>`
+        ${posten.map(ps=>{
+          const photos=state.photos.filter(p=>p.postenId===ps.id);
+          const imgSize=photos.length>1?106:220;
+          const imgsHtml=photos.length
+            ? photos.map(p=>`<img data-photo-id="${p.id}" src="${p.thumb}" style="width:${imgSize}px;height:${imgSize}px;object-fit:cover;border-radius:2px;border:1px solid #6fb8dd">`).join('')
+            : `<div style="width:220px;height:220px;border:1px dashed #6fb8dd;border-radius:2px;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px">Kein Foto</div>`;
+          return `
           <div class="mb-untermotiv-box" style="page-break-inside:avoid;break-inside:avoid">
-            <div style="display:flex;gap:16px;flex-wrap:wrap">
-              <img data-photo-id="${p.id}" src="${p.thumb}" style="width:220px;height:220px;object-fit:cover;border-radius:2px;flex:none;border:1px solid #6fb8dd">
-              <table style="flex:1;min-width:220px;border-collapse:collapse;font-size:calc(13px * var(--mb-scale,1))">
-                <thead><tr><th style="text-align:left;border-bottom:1px solid #6fb8dd;padding:5px 8px">Gegenstand</th><th style="text-align:left;border-bottom:1px solid #6fb8dd;padding:5px 8px">Anzahl</th></tr></thead>
-                <tbody>${(p.items||[]).filter(i=>i.description).map(i=>`<tr><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0">${escapeHtml(i.description)}</td><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0">${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="2" style="padding:5px 8px;color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
+            <div style="display:flex;gap:16px">
+              <div style="width:228px;flex:none;display:flex;gap:6px;flex-wrap:wrap">${imgsHtml}</div>
+              <table style="flex:1;min-width:220px;border-collapse:collapse;table-layout:fixed;font-size:calc(13px * var(--mb-scale,1))">
+                <colgroup><col><col style="width:64px"></colgroup>
+                <thead><tr><th style="text-align:left;border-bottom:1px solid #6fb8dd;padding:5px 8px">Gegenstand</th><th style="text-align:right;border-bottom:1px solid #6fb8dd;padding:5px 8px">Anzahl</th></tr></thead>
+                <tbody>${(ps.items||[]).filter(i=>i.description).map(i=>`<tr><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0;overflow-wrap:break-word">${escapeHtml(i.description)}</td><td style="padding:5px 8px;border-bottom:1px solid #cfe3f0;text-align:right">${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="2" style="padding:5px 8px;color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
               </table>
             </div>
-          </div>`).join('')}
-        ${photos.length?'':'<div style="color:#999">Noch keine Fotos hinzugefügt</div>'}
+          </div>`;
+        }).join('')}
+        ${posten.length?'':'<div style="color:#999">Noch keine Posten hinzugefügt</div>'}
       </div>
     </div>
   `;
@@ -2292,9 +2442,9 @@ function renderLeihlisteChecklist(){
   const el=document.getElementById('view-leihliste-checklist');
   const target=state.leihlisten.find(x=>x.id===state.printLeihlisteId);
   if(!target){ el.innerHTML=`<div class="empty">Leihliste nicht gefunden</div>`; return; }
-  const photos=sortLeihlistePhotos(state.photos.filter(p=>p.leihlisteId===target.id));
+  const posten=sortLeihlistePosten(state.leihlistePosten.filter(x=>x.leihlisteId===target.id));
   const rows=[];
-  photos.forEach(p=>(p.items||[]).forEach(i=>{ if(i.description) rows.push(i); }));
+  posten.forEach(p=>(p.items||[]).forEach(i=>{ if(i.description) rows.push(i); }));
   const notesHtml=`<div class="mb-label">Stand: ${escapeHtml(fmtDate(todayISO()))} · zum Abhaken beim Abholen/Zurückgeben</div>`;
   el.innerHTML=`
     <div class="mb-print-wrap">
@@ -2305,9 +2455,10 @@ function renderLeihlisteChecklist(){
       <div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
         ${mbSheetHeaderHTML((target.title||'Leihliste')+' — Checkliste',notesHtml)}
         <div class="mb-untermotiv-box">
-          <table class="ll-checklist" style="background:transparent">
-            <thead><tr><th></th><th>Gegenstand</th><th>Anzahl</th></tr></thead>
-            <tbody>${rows.map(i=>`<tr><td><span class="ll-checkbox"></span></td><td>${escapeHtml(i.description)}</td><td>${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
+          <table class="ll-checklist" style="background:transparent;table-layout:fixed;width:100%">
+            <colgroup><col style="width:40px"><col><col style="width:70px"></colgroup>
+            <thead><tr><th></th><th style="text-align:left">Gegenstand</th><th style="text-align:right">Anzahl</th></tr></thead>
+            <tbody>${rows.map(i=>`<tr><td><span class="ll-checkbox"></span></td><td>${escapeHtml(i.description)}</td><td style="text-align:right">${escapeHtml(i.quantity||'')}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#999">Keine Gegenstände erfasst</td></tr>'}</tbody>
           </table>
         </div>
       </div>
@@ -2647,7 +2798,7 @@ async function importArbeitsplanFile(file){
 
 /* ---------------------------- Backup Export/Import ---------------------------- */
 function exportBackup(){
-  const payload={format:'sep_zulieferer_backup_v1',savedAt:new Date().toISOString(),suppliers:state.suppliers,appointments:state.appointments,photos:state.photos,drehplan:state.drehplan,arbeitsplan:state.arbeitsplan,motivblaetter:state.motivblaetter,leihlisten:state.leihlisten,
+  const payload={format:'sep_zulieferer_backup_v1',savedAt:new Date().toISOString(),suppliers:state.suppliers,appointments:state.appointments,photos:state.photos,drehplan:state.drehplan,arbeitsplan:state.arbeitsplan,motivblaetter:state.motivblaetter,leihlisten:state.leihlisten,leihlistePosten:state.leihlistePosten,
     settings:{companyLogo:state.settings.companyLogo,headerPattern:state.settings.headerPattern,defaultProjectTitle:state.settings.defaultProjectTitle,motivblattStyle:state.settings.motivblattStyle}};
   downloadFile('september-zulieferer-backup-'+todayISO()+'.json',JSON.stringify(payload,null,2),'application/json');
 }
@@ -2662,13 +2813,15 @@ async function importBackupFile(file){
     if(Array.isArray(data.arbeitsplan)) state.arbeitsplan=data.arbeitsplan;
     if(Array.isArray(data.motivblaetter)) state.motivblaetter=data.motivblaetter;
     if(Array.isArray(data.leihlisten)) state.leihlisten=data.leihlisten;
+    if(Array.isArray(data.leihlistePosten)) state.leihlistePosten=data.leihlistePosten;
     if(data.settings){
       if(data.settings.companyLogo!=null) state.settings.companyLogo=data.settings.companyLogo;
       if(data.settings.headerPattern!=null) state.settings.headerPattern=data.settings.headerPattern;
       if(data.settings.defaultProjectTitle!=null) state.settings.defaultProjectTitle=data.settings.defaultProjectTitle;
       if(data.settings.motivblattStyle!=null) state.settings.motivblattStyle={...DEFAULT_MB_STYLE,...data.settings.motivblattStyle};
     }
-    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter(); await saveLeihlisten(); await saveSettings();
+    await migrateLeihlistePosten();
+    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter(); await saveLeihlisten(); await saveLeihlistePosten(); await saveSettings();
     toast('Sicherung geladen'); closeModal(); render();
   }catch(e){ toast('Fehler beim Laden: '+e.message); }
 }
@@ -2735,9 +2888,12 @@ document.addEventListener('click', async (e)=>{
     case 'del-leihliste': deleteLeihliste(t.dataset.id); break;
     case 'print-leihliste': await openLeihlistePrint(t.dataset.id); break;
     case 'checklist-leihliste': openLeihlisteChecklist(t.dataset.id); break;
-    case 'add-ll-item': addLeihlisteItem(t.dataset.photoId); break;
-    case 'del-ll-item': deleteLeihlisteItem(t.dataset.photoId,t.dataset.itemId); break;
+    case 'add-ll-item': addLeihlisteItem(t.dataset.postenId); break;
+    case 'del-ll-item': deleteLeihlisteItem(t.dataset.postenId,t.dataset.itemId); break;
+    case 'del-posten': deleteLeihlistePosten(t.dataset.postenId); break;
+    case 'add-photo-to-posten': addPhotoToPosten(t.dataset.postenId); break;
     case 'zoom-photo': openPhotoZoomEditor(t.dataset.id); break;
+    case 'replace-photo': replacePhoto(t.dataset.id); break;
     case 'apply-photo-zoom': await applyPhotoZoom(t.dataset.id); break;
     case 'reset-photo-zoom': await resetPhotoZoom(t.dataset.id); break;
     case 'open-settings': openSettings(); break;
