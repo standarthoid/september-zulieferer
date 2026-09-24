@@ -265,6 +265,11 @@
   .ll-drag-handle{width:20px;flex:none;color:var(--ink-muted);cursor:grab;display:flex;align-items:center;justify-content:center;align-self:stretch;touch-action:none}
   .ll-drag-handle:active{cursor:grabbing}
   .ll-drag-handle .icon{width:18px;height:18px}
+  .pcrop-badge{position:absolute;bottom:4px;left:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center}
+  .pcrop-badge .icon{width:12px;height:12px}
+  .zoom-viewport{width:100%;max-width:340px;height:340px;margin:0 auto;overflow:hidden;position:relative;background:#111;border-radius:8px;touch-action:none;cursor:grab}
+  .zoom-viewport:active{cursor:grabbing}
+  .zoom-viewport img{position:absolute;top:0;left:0;user-select:none;-webkit-user-drag:none;max-width:none}
   .ll-photo-entry .ll-thumb-col{width:140px;flex:none}
   .ll-photo-entry .ll-thumb-col .photo-thumb{width:140px;height:140px}
   .ll-photo-entry .ll-items-col{flex:1;min-width:220px}
@@ -353,6 +358,7 @@ const ICON = {
   box:'<svg viewBox="0 0 24 24"><path d="M3 8l9-5 9 5-9 5-9-5z M3 8v9l9 5 9-5V8 M12 13v9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   check2:'<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   drag:'<svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>',
+  zoom:'<svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5" stroke-linecap="round"/></svg>',
 };
 const ic=(name,cls)=>`<span class="icon${cls?' '+cls:''}">${ICON[name]||''}</span>`;
 
@@ -1711,7 +1717,7 @@ async function upgradeMotivblattPrintPhotos(){
   for(const img of imgs){
     const p=state.photos.find(x=>x.id===img.dataset.photoId);
     if(!p) continue;
-    try{ img.src=await getPhotoFullSrc(p); }catch(e){}
+    try{ img.src=await getPhotoDisplaySrc(p,900); }catch(e){}
   }
 }
 // Fotos werden nie verkleinert. Erste Seite eines Untermotivs trägt den vollen Kopf
@@ -1903,7 +1909,9 @@ function renderLeihlistePhotoEntry(p){
       <div class="photo-thumb" data-action="open-photo" data-id="${p.id}">
         <img src="${p.thumb}" loading="lazy">
         <button class="pdel" data-action="del-photo" data-id="${p.id}" title="Foto löschen">${ic('close')}</button>
+        ${p.cropRect?`<span class="pcrop-badge" title="Ausschnitt gesetzt">${ic('zoom')}</span>`:''}
       </div>
+      <button class="btn btn-sm btn-block" style="margin-top:6px" data-action="zoom-photo" data-id="${p.id}">${ic('zoom')} Zoomen</button>
     </div>
     <div class="ll-items-col">
       <div id="ll-items-${p.id}">${items.map(i=>renderLeihlisteItemRow(p.id,i)).join('')}</div>
@@ -1991,6 +1999,137 @@ function reorderLeihlistePhotos(leihlisteId,srcId,targetId){
   savePhotos();
   render();
 }
+
+/* ---------------------------- Foto-Zoom/Zuschnitt ---------------------------- */
+// Lässt eine bestimmte Stelle eines Fotos zeigen (z.B. genau der Gegenstand, der
+// ausgeliehen wird), statt immer das ganze Foto. Ziehen = verschieben, Regler = zoomen.
+// Ergebnis wird als neues photo.thumb + photo.cropRect (in % der Originalgröße) gespeichert.
+let _zoomState=null;
+function openPhotoZoomEditor(photoId){
+  const p=state.photos.find(x=>x.id===photoId); if(!p) return;
+  getPhotoFullSrc(p).then(src=>{
+    openModal(`
+      <div class="modal-head"><h3>Foto zoomen &amp; zuschneiden</h3><button class="iconbtn" data-action="close-modal">${ic('close')}</button></div>
+      <div class="modal-body stack">
+        <div class="hint">Zum Verschieben ziehen, mit dem Regler zoomen — so lässt sich genau die Stelle zeigen, die tatsächlich ausgeliehen wird.</div>
+        <div id="zoom-viewport" class="zoom-viewport"><img id="zoom-img" src="${src}" draggable="false"></div>
+        <div class="field"><label>Zoom</label><input type="range" id="zoom-slider" min="100" max="400" value="100" step="1"></div>
+        <div class="row" style="gap:8px">
+          <button class="btn grow" data-action="reset-photo-zoom" data-id="${p.id}">Zurücksetzen</button>
+          <button class="btn btn-primary grow" data-action="apply-photo-zoom" data-id="${p.id}">Übernehmen</button>
+        </div>
+      </div>
+    `);
+    const img=document.getElementById('zoom-img');
+    const viewport=document.getElementById('zoom-viewport');
+    const slider=document.getElementById('zoom-slider');
+    const setup=()=>initZoomEditor(p,img,viewport,slider);
+    if(img.complete&&img.naturalWidth) setup(); else img.onload=setup;
+  });
+}
+function initZoomEditor(p,img,viewport,slider){
+  const VW=viewport.clientWidth||340, VH=viewport.clientHeight||340;
+  const naturalW=img.naturalWidth, naturalH=img.naturalHeight;
+  const baseScale=Math.max(VW/naturalW, VH/naturalH);
+  let z,left,top;
+  if(p.cropRect){
+    const srcW=p.cropRect.w/100*naturalW, srcH=p.cropRect.h/100*naturalH;
+    const srcX=p.cropRect.x/100*naturalW, srcY=p.cropRect.y/100*naturalH;
+    z=Math.min(4,Math.max(1, VW/(srcW*baseScale)));
+    left=-srcX*baseScale*z; top=-srcY*baseScale*z;
+  }else{
+    z=1;
+    left=(VW-naturalW*baseScale)/2; top=(VH-naturalH*baseScale)/2;
+  }
+  _zoomState={photoId:p.id,naturalW,naturalH,baseScale,VW,VH,z,left,top,img,viewport};
+  slider.value=Math.round(z*100);
+  applyZoomTransform();
+
+  let dragging=false,lastX=0,lastY=0;
+  const start=(x,y)=>{dragging=true;lastX=x;lastY=y;};
+  const move=(x,y)=>{
+    if(!dragging) return;
+    const dx=x-lastX, dy=y-lastY; lastX=x; lastY=y;
+    const s=_zoomState;
+    const dispW=s.naturalW*s.baseScale*s.z, dispH=s.naturalH*s.baseScale*s.z;
+    s.left=Math.min(0,Math.max(s.VW-dispW, s.left+dx));
+    s.top=Math.min(0,Math.max(s.VH-dispH, s.top+dy));
+    applyZoomTransform();
+  };
+  const end=()=>{dragging=false;};
+  viewport.addEventListener('mousedown',e=>{start(e.clientX,e.clientY);e.preventDefault();});
+  window.addEventListener('mousemove',e=>move(e.clientX,e.clientY));
+  window.addEventListener('mouseup',end);
+  viewport.addEventListener('touchstart',e=>{const t=e.touches[0];start(t.clientX,t.clientY);},{passive:true});
+  viewport.addEventListener('touchmove',e=>{const t=e.touches[0];move(t.clientX,t.clientY);e.preventDefault();},{passive:false});
+  viewport.addEventListener('touchend',end);
+  slider.addEventListener('input',()=>{
+    const s=_zoomState;
+    const newZ=slider.value/100;
+    const dispWOld=s.naturalW*s.baseScale*s.z, dispHOld=s.naturalH*s.baseScale*s.z;
+    const centerXOld=(s.VW/2-s.left)/dispWOld, centerYOld=(s.VH/2-s.top)/dispHOld;
+    s.z=newZ;
+    const dispW=s.naturalW*s.baseScale*s.z, dispH=s.naturalH*s.baseScale*s.z;
+    s.left=Math.min(0,Math.max(s.VW-dispW, s.VW/2-centerXOld*dispW));
+    s.top=Math.min(0,Math.max(s.VH-dispH, s.VH/2-centerYOld*dispH));
+    applyZoomTransform();
+  });
+}
+function applyZoomTransform(){
+  const s=_zoomState; if(!s) return;
+  const dispW=s.naturalW*s.baseScale*s.z, dispH=s.naturalH*s.baseScale*s.z;
+  s.img.style.width=dispW+'px'; s.img.style.height=dispH+'px';
+  s.img.style.transform=`translate(${s.left}px,${s.top}px)`;
+}
+async function applyPhotoZoom(photoId){
+  const s=_zoomState;
+  const p=state.photos.find(x=>x.id===photoId);
+  if(!s||s.photoId!==photoId||!p){ closeModal(); return; }
+  const srcX=-s.left/(s.baseScale*s.z), srcY=-s.top/(s.baseScale*s.z);
+  const srcW=s.VW/(s.baseScale*s.z), srcH=s.VH/(s.baseScale*s.z);
+  const canvas=document.createElement('canvas'); const OUT=480;
+  canvas.width=OUT; canvas.height=OUT;
+  canvas.getContext('2d').drawImage(s.img, srcX, srcY, srcW, srcH, 0, 0, OUT, OUT);
+  p.thumb=canvas.toDataURL('image/jpeg',0.85);
+  p.cropRect={ x:srcX/s.naturalW*100, y:srcY/s.naturalH*100, w:srcW/s.naturalW*100, h:srcH/s.naturalH*100 };
+  await savePhotos();
+  _zoomState=null; closeModal(); toast('Ausschnitt gespeichert'); render();
+}
+async function resetPhotoZoom(photoId){
+  const p=state.photos.find(x=>x.id===photoId); if(!p) return;
+  try{
+    const src=await getPhotoFullSrc(p);
+    const img=new Image();
+    await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=src; });
+    const canvas=document.createElement('canvas'); const OUT=480;
+    canvas.width=OUT; canvas.height=OUT;
+    const baseScale=Math.max(OUT/img.naturalWidth, OUT/img.naturalHeight);
+    const dispW=img.naturalWidth*baseScale, dispH=img.naturalHeight*baseScale;
+    canvas.getContext('2d').drawImage(img, (OUT-dispW)/2, (OUT-dispH)/2, dispW, dispH);
+    p.thumb=canvas.toDataURL('image/jpeg',0.85);
+    delete p.cropRect;
+    await savePhotos();
+    _zoomState=null; closeModal(); toast('Zurückgesetzt'); render();
+  }catch(e){ toast('Fehler beim Zurücksetzen'); }
+}
+async function getPhotoDisplaySrc(photo,targetSize){
+  const fullSrc=await getPhotoFullSrc(photo);
+  if(!photo.cropRect) return fullSrc;
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const {x,y,w,h}=photo.cropRect;
+      const sx=x/100*img.naturalWidth, sy=y/100*img.naturalHeight;
+      const sw=w/100*img.naturalWidth, sh=h/100*img.naturalHeight;
+      const canvas=document.createElement('canvas'); const OUT=targetSize||900;
+      canvas.width=OUT; canvas.height=OUT;
+      canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, OUT, OUT);
+      resolve(canvas.toDataURL('image/jpeg',0.88));
+    };
+    img.onerror=()=>resolve(photo.thumb);
+    img.src=fullSrc;
+  });
+}
 const debouncedSaveLeihlisten=debounce(()=>saveLeihlisten(),700);
 function addLeihlisteItem(photoId){
   const p=state.photos.find(x=>x.id===photoId); if(!p) return;
@@ -2018,7 +2157,7 @@ async function openLeihlistePrint(id){
   const imgs=document.querySelectorAll('#view-leihliste-print img[data-photo-id]');
   for(const img of imgs){
     const p=state.photos.find(x=>x.id===img.dataset.photoId); if(!p) continue;
-    try{ img.src=await getPhotoFullSrc(p); }catch(e){}
+    try{ img.src=await getPhotoDisplaySrc(p,900); }catch(e){}
   }
 }
 function mbSheetHeaderHTML(titleBoxLabel,notesHtml){
@@ -2499,6 +2638,9 @@ document.addEventListener('click', async (e)=>{
     case 'checklist-leihliste': openLeihlisteChecklist(t.dataset.id); break;
     case 'add-ll-item': addLeihlisteItem(t.dataset.photoId); break;
     case 'del-ll-item': deleteLeihlisteItem(t.dataset.photoId,t.dataset.itemId); break;
+    case 'zoom-photo': openPhotoZoomEditor(t.dataset.id); break;
+    case 'apply-photo-zoom': await applyPhotoZoom(t.dataset.id); break;
+    case 'reset-photo-zoom': await resetPhotoZoom(t.dataset.id); break;
     case 'open-settings': openSettings(); break;
     case 'settings-tab': state.settingsTab=t.dataset.tab; renderSettingsModal(); break;
     case 'dbx-start-auth': {
