@@ -2013,139 +2013,156 @@ function mbProjectHeaderHTML(mb){
       <div class="mb-logo-box">${logo?`<img src="${logo}">`:''}</div>
     </div>`;
 }
-// Teilt Fotos + Notizen eines Untermotivs anhand ECHTER Höhen-Messung im (unsichtbaren)
-// DOM in Blätter auf — statt einer groben Foto-Anzahl-Schätzung. Dadurch: nie mehr
-// Inhalt, der über den Blattrand hinausläuft (abgeschnitten würde), und keine großen
-// Lücken mehr, weil Notizen, die nicht mehr neben die Fotos passen, automatisch mit auf
-// die Fortsetzungsseite wandern, statt einfach über den Rand hinauszulaufen.
-function paginateUntermotivForPrint(mb,u,photos,notesLines,showHeader){
+// Baut die gesamte Seitenaufteilung eines Motivblatts IN EINEM DURCHGANG über alle
+// Untermotive hinweg, anhand ECHTER Höhen-Messung im (unsichtbaren) DOM — statt
+// jedes Untermotiv zwingend auf einer eigenen neuen Seite zu beginnen. Der volle
+// Kopfbereich erscheint einmal auf Seite 1 (kostet dort Platz); danach läuft ein
+// Untermotiv einfach direkt im Anschluss an das vorherige weiter, solange auf der
+// aktuellen Seite noch Platz ist. Erst wenn wirklich nichts mehr passt, beginnt eine
+// neue Seite — nie mitten im Inhalt (kein Abschneiden am Blattrand), aber auch nie
+// eine neue Seite nur, weil ein neues Untermotiv anfängt.
+function paginateMotivblattForPrint(mb,untermotive){
   const scratch=document.createElement('div');
   scratch.className='mb-sheet';
   scratch.setAttribute('style',`position:fixed;left:-9999px;top:0;visibility:hidden;width:210mm;max-width:none;${motivblattStyleAttr()}`);
   document.body.appendChild(scratch);
 
-  const headerHtml=showHeader?mbProjectHeaderHTML(mb):'';
   const headerEl=document.createElement('div');
-  headerEl.innerHTML=headerHtml;
+  headerEl.innerHTML=mbProjectHeaderHTML(mb);
   scratch.appendChild(headerEl);
   const headerHeight=headerEl.getBoundingClientRect().height;
   scratch.removeChild(headerEl);
 
-  const box=document.createElement('div');
-  box.className='mb-untermotiv-box';
-  scratch.appendChild(box);
-  const head=document.createElement('div');
-  head.className='mb-untermotiv-head';
-  head.innerHTML=`<h3>${escapeHtml(u.title||'')}</h3>${u.ref?`<div class="mb-ref">${escapeHtml(u.ref)}</div>`:''}`;
-  box.appendChild(head);
-  // Konzeptbild (falls vorhanden) erscheint nur auf der ersten Seite dieses
-  // Untermotivs — wird vor der ersten Fotos/Notizen-Runde wieder entfernt.
-  const uConcept=getConceptPhoto(mb.id, u.id!=='_leer'?u.id:null);
-  let conceptEl=null;
-  if(uConcept){
-    conceptEl=document.createElement('div');
-    conceptEl.className='mb-concept-photo';
-    conceptEl.innerHTML=`<img src="${uConcept.thumb||''}">`;
-    box.appendChild(conceptEl);
-  }
-  const photoRow=document.createElement('div');
-  photoRow.className='mb-photo-row';
-  box.appendChild(photoRow);
-  const notesList=document.createElement('ul');
-  notesList.className='mb-notes';
-  box.appendChild(notesList);
-
   const pageContentHeight=mbPageContentHeightPx();
-  let photoIdx=0, noteIdx=0;
-  const chunks=[];
+  const pages=[];
+  let currentPage={showHeader:true, fragments:[]};
+  let used=headerHeight;
+  function flushPage(){
+    pages.push(currentPage);
+    currentPage={showHeader:false, fragments:[]};
+    used=0;
+  }
 
-  do{
-    if(chunks.length===1 && conceptEl && conceptEl.parentNode){ box.removeChild(conceptEl); } // nur Seite 1
-    const budget=pageContentHeight-(chunks.length===0?headerHeight:0);
-    photoRow.innerHTML=''; notesList.innerHTML='';
-    const chunkPhotos=[], chunkNotes=[];
-    let addedSomething=false;
+  untermotive.forEach(u=>{
+    const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id&&p.role!=='concept');
+    const notesLines=(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
+    const uConcept=getConceptPhoto(mb.id, u.id!=='_leer'?u.id:null);
 
-    // Erzwungenes Aufnehmen (mind. 1 Element pro Seite, gegen Endlosschleifen) nur ab
-    // der zweiten Seite dieses Untermotivs erlauben (chunks.length>0) — dort ist das
-    // Budget immer die volle Seitenhöhe, ein einzelnes Element passt praktisch immer
-    // hinein. Auf Seite 1 (mit Kopfbereich, der bei großem Konzeptbild schon viel Platz
-    // braucht) NICHT erzwingen: sonst würde genau dieses eine Element über den
-    // Blattrand hinauslaufen. Passt dort nichts mehr hin, bleibt Seite 1 ohne
-    // Fotos/Notizen (nur Kopf + Untermotiv-Titel), und alles wandert sauber mit
-    // vollem Budget auf die nächste Seite.
-    while(photoIdx<photos.length){
-      const p=photos[photoIdx];
-      const info=photoSizeInfo(p);
-      const el=document.createElement('div');
-      el.className='mb-photo';
-      el.style.gridColumn=`span ${info.span}`;
-      el.innerHTML=`<img src="${p.thumb||''}" style="height:${info.height}px">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}`;
-      photoRow.appendChild(el);
-      const fits=box.getBoundingClientRect().height<=budget;
-      const forceOk=!addedSomething && chunks.length>0;
-      if(fits||forceOk){
-        chunkPhotos.push(p); photoIdx++; addedSomething=true;
-        if(fits) continue;
-        break; // erzwungen aufgenommen (passte nicht, aber Seite war sonst leer) -> Seite hier abschließen
-      }
-      photoRow.removeChild(el);
-      break;
+    const box=document.createElement('div');
+    box.className='mb-untermotiv-box';
+    scratch.appendChild(box);
+    const head=document.createElement('div');
+    head.className='mb-untermotiv-head';
+    head.innerHTML=`<h3>${escapeHtml(u.title||'')}</h3>${u.ref?`<div class="mb-ref">${escapeHtml(u.ref)}</div>`:''}`;
+    box.appendChild(head);
+    let conceptEl=null;
+    if(uConcept){
+      conceptEl=document.createElement('div');
+      conceptEl.className='mb-concept-photo';
+      conceptEl.innerHTML=`<img src="${uConcept.thumb||''}">`;
+      box.appendChild(conceptEl);
     }
-    while(noteIdx<notesLines.length){
-      const line=notesLines[noteIdx];
-      const li=document.createElement('li');
-      li.textContent=line.replace(/^[-•]\s*/,'');
-      notesList.appendChild(li);
-      const fits=box.getBoundingClientRect().height<=budget;
-      const forceOk=!addedSomething && chunks.length>0;
-      if(fits||forceOk){
-        chunkNotes.push(line); noteIdx++; addedSomething=true;
-        if(fits) continue;
-        break;
-      }
-      notesList.removeChild(li);
-      break;
-    }
-    chunks.push({photos:chunkPhotos, notes:chunkNotes});
-  }while(photoIdx<photos.length||noteIdx<notesLines.length);
+    const photoRow=document.createElement('div');
+    photoRow.className='mb-photo-row';
+    box.appendChild(photoRow);
+    const notesList=document.createElement('ul');
+    notesList.className='mb-notes';
+    box.appendChild(notesList);
 
+    let photoIdx=0, noteIdx=0, isFirstFragment=true;
+    const uFragments=[];
+
+    do{
+      if(!isFirstFragment && conceptEl && conceptEl.parentNode){ box.removeChild(conceptEl); }
+      let fragHeight=0, chunkPhotos=[], chunkNotes=[];
+      // Bis zu 2 Versuche: erst mit dem Rest-Platz der aktuellen (evtl. schon von
+      // einem vorherigen Untermotiv belegten) Seite; passt gar nichts mehr rein UND
+      // die Seite hat schon anderen Inhalt, auf einer frischen Seite (volles Budget)
+      // noch einmal versuchen — dort passt (mind. per Zwang) garantiert etwas hin.
+      for(let attempt=0; attempt<2; attempt++){
+        const budget=pageContentHeight-used;
+        const savedPhotoIdx=photoIdx, savedNoteIdx=noteIdx;
+        const pageIsEmpty=currentPage.fragments.length===0;
+        photoRow.innerHTML=''; notesList.innerHTML='';
+        chunkPhotos=[]; chunkNotes=[];
+        let addedSomething=false;
+
+        while(photoIdx<photos.length){
+          const p=photos[photoIdx];
+          const info=photoSizeInfo(p);
+          const el=document.createElement('div');
+          el.className='mb-photo';
+          el.style.gridColumn=`span ${info.span}`;
+          el.innerHTML=`<img src="${p.thumb||''}" style="height:${info.height}px">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}`;
+          photoRow.appendChild(el);
+          const fits=box.getBoundingClientRect().height<=budget;
+          const forceOk=!addedSomething && pageIsEmpty;
+          if(fits||forceOk){
+            chunkPhotos.push(p); photoIdx++; addedSomething=true;
+            if(fits) continue;
+            break;
+          }
+          photoRow.removeChild(el);
+          break;
+        }
+        while(noteIdx<notesLines.length){
+          const line=notesLines[noteIdx];
+          const li=document.createElement('li');
+          li.textContent=line.replace(/^[-•]\s*/,'');
+          notesList.appendChild(li);
+          const fits=box.getBoundingClientRect().height<=budget;
+          const forceOk=!addedSomething && pageIsEmpty;
+          if(fits||forceOk){
+            chunkNotes.push(line); noteIdx++; addedSomething=true;
+            if(fits) continue;
+            break;
+          }
+          notesList.removeChild(li);
+          break;
+        }
+
+        fragHeight=box.getBoundingClientRect().height;
+        if(used+fragHeight<=pageContentHeight || pageIsEmpty || attempt===1) break;
+        photoIdx=savedPhotoIdx; noteIdx=savedNoteIdx;
+        flushPage();
+      }
+
+      const frag={u, title:u.title||'', showConcept:isFirstFragment, photos:chunkPhotos, notes:chunkNotes};
+      currentPage.fragments.push(frag);
+      uFragments.push(frag);
+      used+=fragHeight;
+      isFirstFragment=false;
+    }while(photoIdx<photos.length||noteIdx<notesLines.length);
+
+    if(uFragments.length>1){
+      uFragments.forEach((f,i)=>{ f.title=(u.title||'')+` (Fortsetzung ${i+1}/${uFragments.length})`; });
+    }
+    scratch.removeChild(box);
+  });
+
+  flushPage();
   document.body.removeChild(scratch);
-  return chunks;
+  return pages;
 }
 function renderMotivblattPrint(){
   const el=document.getElementById('view-motivblatt-print');
   const mb=state.motivblaetter.find(x=>x.id===state.printMotivblattId);
   if(!mb){ el.innerHTML=`<div class="empty">Motivblatt nicht gefunden</div>`; return; }
   const untermotive=(mb.untermotive&&mb.untermotive.length)?mb.untermotive:[{id:'_leer',title:'',ref:'',notes:''}];
-  const sheets=[];
-  // Der volle Kopfbereich (Banner/Projekt-Titel/Motiv-Box/Adresse/Ansprechpartner*innen/
-  // Logo/Konzeptbild) erscheint nur EINMAL im ganzen Dokument, auf der allerersten
-  // Seite. Jedes weitere Untermotiv-Blatt zeigt nur noch den Untermotiv-Titel, dessen
-  // eigenes Konzeptbild (falls vorhanden) und die Fotos/Notizen dazu.
-  let headerShown=false;
-  untermotive.forEach(u=>{
-    const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id&&p.role!=='concept');
-    const notesLines=(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
-    const showHeaderHere=!headerShown;
-    const chunks=(photos.length||notesLines.length)?paginateUntermotivForPrint(mb,u,photos,notesLines,showHeaderHere):[{photos:[],notes:[]}];
-    chunks.forEach((chunk,idx)=>{
-      const hideHeader=!(showHeaderHere&&idx===0);
-      const uPart=chunks.length>1
-        ? {...u, title:(u.title||'')+` (Fortsetzung ${idx+1}/${chunks.length})`}
-        : u;
-      sheets.push(renderMotivblattSheetHTML(mb,uPart,chunk.photos,hideHeader,chunk.notes,idx===0));
-    });
-    if(showHeaderHere) headerShown=true;
-  });
+  const pages=paginateMotivblattForPrint(mb,untermotive);
+  const sheets=pages.map(page=>{
+    const headerHtml=page.showHeader?mbProjectHeaderHTML(mb):'';
+    const boxesHtml=page.fragments.map(f=>renderUntermotivBoxHTML(mb,f)).join('');
+    return `<div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">${headerHtml}${boxesHtml}</div>`;
+  }).join('');
   el.innerHTML=`
     <div class="mb-print-wrap">
       <div class="mb-sheet-toolbar no-print">
         <button class="btn btn-sm" data-action="set-view" data-view="motivblatt-edit">${ic('back')} Zurück zum Bearbeiten</button>
         <button class="btn btn-primary btn-sm" data-action="do-print">${ic('download')} Als PDF drucken/speichern</button>
       </div>
-      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Jede Seite ist fix im DIN-A4-Format, mit Rand oben/unten, damit Drucker nichts abschneiden. Fotos werden nie verkleinert, um mehr auf eine Seite zu quetschen — bei zu vielen Fotos/Notizen pro Untermotiv wird automatisch eine Fortsetzungsseite angelegt (ohne Kopfbereich, dafür mit mehr Platz), dabei wird jede Seite so voll wie möglich genutzt. Für kleinteilige Pläne o.ä. lässt sich die Größe einzelner Fotos beim Bearbeiten auf „Groß"/„Sehr groß" stellen. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" wählen (nicht „An Seite anpassen"), damit das erhalten bleibt.</div>
-      ${sheets.join('')}
+      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Jede Seite ist fix im DIN-A4-Format, mit Rand oben/unten, damit Drucker nichts abschneiden. Fotos werden nie verkleinert, um mehr auf eine Seite zu quetschen. Untermotive laufen direkt hintereinander weiter, solange noch Platz ist — erst wenn eine Seite wirklich voll ist, geht es auf der nächsten weiter. Für kleinteilige Pläne o.ä. lässt sich die Größe einzelner Fotos beim Bearbeiten auf „Groß"/„Sehr groß" stellen. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" wählen (nicht „An Seite anpassen"), damit das erhalten bleibt.</div>
+      ${sheets}
     </div>
   `;
 }
@@ -2178,22 +2195,18 @@ function motivblattStyleAttr(){
   const boxBg=`rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`;
   return `font-family:${font.css};color:${textColor};--mb-scale:${scale};--mb-weight:${weight};--mb-italic:${italic};--mb-underline:${underline};--mb-textcolor:${textColor};--mb-boxbg:${boxBg}`;
 }
-function renderMotivblattSheetHTML(mb,u,photosOverride,hideHeader,notesOverride,showUntermotivConcept){
-  const photos=photosOverride||(u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id&&p.role!=='concept'));
-  const notesLines=notesOverride!=null?notesOverride:(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
-  const headerHtml=hideHeader?'':mbProjectHeaderHTML(mb);
-  const uConcept=showUntermotivConcept===false?null:getConceptPhoto(mb.id, u.id!=='_leer'?u.id:null);
-  return `<div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
-    ${headerHtml}
-    ${(u.title||u.ref||photos.length||notesLines.length)?`<div class="mb-untermotiv-box">
-      <div class="mb-untermotiv-head"><h3>${escapeHtml(u.title||'')}</h3>${u.ref?`<div class="mb-ref">${escapeHtml(u.ref)}</div>`:''}</div>
-      ${uConcept?`<div class="mb-concept-photo"><img data-photo-id="${uConcept.id}" src="${uConcept.thumb}"></div>`:''}
-      ${photos.length?`<div class="mb-photo-row">${photos.map(p=>{
-        const info=photoSizeInfo(p);
-        return `<div class="mb-photo" style="grid-column:span ${info.span}"><img data-photo-id="${p.id}" src="${p.thumb}" style="height:${info.height}px">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}</div>`;
-      }).join('')}</div>`:''}
-      ${notesLines.length?`<ul class="mb-notes">${notesLines.map(l=>`<li>${escapeHtml(l.replace(/^[-•]\s*/,''))}</li>`).join('')}</ul>`:''}
-    </div>`:''}
+function renderUntermotivBoxHTML(mb,frag){
+  const u=frag.u;
+  const uConcept=frag.showConcept?getConceptPhoto(mb.id, u.id!=='_leer'?u.id:null):null;
+  if(!(frag.title||u.ref||frag.photos.length||frag.notes.length)) return '';
+  return `<div class="mb-untermotiv-box">
+    <div class="mb-untermotiv-head"><h3>${escapeHtml(frag.title||'')}</h3>${u.ref?`<div class="mb-ref">${escapeHtml(u.ref)}</div>`:''}</div>
+    ${uConcept?`<div class="mb-concept-photo"><img data-photo-id="${uConcept.id}" src="${uConcept.thumb}"></div>`:''}
+    ${frag.photos.length?`<div class="mb-photo-row">${frag.photos.map(p=>{
+      const info=photoSizeInfo(p);
+      return `<div class="mb-photo" style="grid-column:span ${info.span}"><img data-photo-id="${p.id}" src="${p.thumb}" style="height:${info.height}px">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}</div>`;
+    }).join('')}</div>`:''}
+    ${frag.notes.length?`<ul class="mb-notes">${frag.notes.map(l=>`<li>${escapeHtml(l.replace(/^[-•]\s*/,''))}</li>`).join('')}</ul>`:''}
   </div>`;
 }
 
