@@ -240,6 +240,10 @@
   .mb-untermotiv-head{background:#fff;border:1px solid #6fb8dd;border-radius:2px;padding:6px 14px;margin-bottom:12px}
   .mb-untermotiv-head h3{font-style:var(--mb-italic,italic);text-decoration:var(--mb-underline,none);font-size:calc(22px * var(--mb-scale,1));font-weight:var(--mb-weight,600);margin:0}
   .mb-ref{font-size:calc(12px * var(--mb-scale,1));color:#444}
+  .mb-concept-photo{width:100%;margin:14px 0;border-radius:2px;overflow:hidden;border:1px solid #6fb8dd}
+  .mb-concept-photo img{width:100%;height:260px;object-fit:cover;display:block}
+  .mb-untermotiv-box .mb-concept-photo{margin:0 0 12px}
+  .mb-untermotiv-box .mb-concept-photo img{height:220px}
   .mb-photo-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
   .mb-photo{width:100%;page-break-inside:avoid;break-inside:avoid}
   .mb-photo img{width:100%;height:140px;object-fit:cover;border-radius:2px;display:block}
@@ -899,6 +903,7 @@ async function addPhotos(files,meta={}){
         supplierId:meta.supplierId||null, appointmentId:meta.appointmentId||null,
         motivblattId:meta.motivblattId||null, untermotivId:meta.untermotivId||null,
         leihlisteId:meta.leihlisteId||null, postenId:meta.postenId||null, // Posten = Gruppe mehrerer Fotos + Gegenstandsliste bei Leihlisten
+        role:meta.role||null, // z.B. 'concept' für ein Konzeptbild (erscheint groß, statt in der normalen Foto-Galerie)
         printSize:1, // Anzeigegröße im Motivblatt-Ausdruck: 1=Normal, 2=Groß, 3=Sehr groß
       };
       state.photos.push(photo);
@@ -1622,6 +1627,8 @@ function renderMotivblattEdit(){
         <div class="field"><label>Motiv *</label><input id="mbf-name" value="${escapeAttr(mb.motivName||'')}" placeholder="z.B. Supermarkt"></div>
       </div>
       <div class="field"><label>Motiv-Adresse</label><textarea id="mbf-address" rows="2" placeholder="Firmenname&#10;Straße, PLZ Ort">${escapeHtml(mb.address||'')}</textarea></div>
+      <div class="divider">Konzeptbild (optional — erscheint groß als Erstes unter dem Motiv-Titel)</div>
+      ${renderConceptImageField(mb.id, null)}
       <div class="divider">Ansprechpartner*innen</div>
       <div id="mbf-contacts">${contacts.map((c,i)=>renderContactRow(c,i)).join('')}</div>
       <button class="btn btn-sm" data-action="add-contact-row" style="align-self:flex-start">${ic('plus')} Ansprechpartner hinzufügen</button>
@@ -1696,13 +1703,17 @@ function renderContactRow(c,i){
   </div>`;
 }
 function renderUntermotivCard(mb,u){
-  const photos=state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id);
+  const photos=state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id&&p.role!=='concept');
   return `<div class="mb-untermotiv-card" data-uid="${u.id}">
     <div class="row between" style="margin-bottom:8px;gap:8px">
       <input data-ufield="title" value="${escapeAttr(u.title||'')}" placeholder="Untermotiv, z.B. Innenhof/Balkon" style="font-weight:600;font-size:14px;border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;flex:1;background:var(--bg-card)">
       <button class="iconbtn btn-sm btn-danger" data-action="del-untermotiv" data-uid="${u.id}" title="Untermotiv löschen">${ic('trash')}</button>
     </div>
     <div class="field" style="margin-bottom:8px"><label>Referenz/Bildnummern (optional)</label><input data-ufield="ref" value="${escapeAttr(u.ref||'')}" placeholder="z.B. Bilder: 33, 34"></div>
+    <div class="field" style="margin-bottom:8px">
+      <label>Konzeptbild (optional — erscheint groß als Erstes unter dem Untermotiv-Titel)</label>
+      ${renderConceptImageField(mb.id, u.id)}
+    </div>
     <div class="drop-zone" style="margin-bottom:8px">
       ${ic('camera')}<div style="margin-top:4px;font-size:12px">Fotos hierher ziehen oder klicken zum Hochladen</div>
       <input type="file" class="mb-photo-file" accept="image/*" multiple style="display:none">
@@ -1879,6 +1890,54 @@ function deleteMotivblatt(id){
   }, ()=>{ photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{})); });
 }
 
+/* ---------------------------- Konzeptbild ---------------------------- */
+// Ein einzelnes, groß angezeigtes Bild (z.B. Stimmungscollage/Referenz), das als
+// Erstes direkt unter dem Motiv- bzw. Untermotiv-Titel erscheint. Optional — wird
+// keins hochgeladen, entfällt der Bereich im Ausdruck einfach. Technisch ein ganz
+// normales Foto (state.photos), nur mit role:'concept' markiert, damit es nicht in
+// der regulären Foto-Galerie auftaucht.
+function getConceptPhoto(motivblattId,untermotivId){
+  return state.photos.find(p=>p.motivblattId===motivblattId && (p.untermotivId||null)===(untermotivId||null) && p.role==='concept');
+}
+function renderConceptImageField(motivblattId,untermotivId){
+  const cp=getConceptPhoto(motivblattId,untermotivId);
+  return `<div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+    ${cp?`<div class="photo-thumb" style="width:120px;height:90px" data-action="open-photo" data-id="${cp.id}">
+      <img src="${cp.thumb}" loading="lazy">
+      <button class="pdel" data-action="del-photo" data-id="${cp.id}" title="Konzeptbild entfernen">${ic('close')}</button>
+    </div>`:`<div class="hint">Noch kein Konzeptbild hinterlegt</div>`}
+    <button class="btn btn-sm" data-action="upload-concept-photo" data-motivblatt-id="${motivblattId}" data-untermotiv-id="${untermotivId||''}">${ic('upload')} Konzeptbild ${cp?'ändern':'hochladen'}</button>
+  </div>`;
+}
+async function setConceptPhoto(motivblattId,untermotivId,file){
+  if(isHeicFile(file)){ toast('HEIC-Format wird von Chrome nicht unterstützt — im Handy auf "Kompatibel"/JPEG umstellen'); return; }
+  if(!file.type.startsWith('image/')){ toast('Datei konnte nicht gelesen werden'); return; }
+  const existing=getConceptPhoto(motivblattId,untermotivId);
+  const added=await addPhotos([file],{motivblattId,untermotivId,role:'concept'});
+  if(!added.length){ photoUploadToast(added); return; }
+  if(existing){
+    appStorage.delete('photoblob:'+existing.id).catch(()=>{});
+    if(dbxConnected() && existing.dropboxPath){
+      dbxGetAccessToken().then(token=>fetch(`${DBX_API}/files/delete_v2`,{method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({path:existing.dropboxPath})})).catch(()=>{});
+    }
+    state.photos=state.photos.filter(p=>p.id!==existing.id);
+    await savePhotos();
+  }
+  toast('Konzeptbild gespeichert');
+  render();
+}
+function uploadConceptPhoto(motivblattId,untermotivId){
+  const input=document.createElement('input');
+  input.type='file'; input.accept='image/*';
+  input.addEventListener('change', async ()=>{
+    const file=input.files[0]; if(!file) return;
+    await setConceptPhoto(motivblattId, untermotivId||null, file);
+  });
+  input.click();
+}
+
 async function openMotivblattPrint(id){
   state.printMotivblattId=id;
   state.view='motivblatt-print';
@@ -1934,11 +1993,13 @@ function mbProjectHeaderHTML(mb){
   const addressLines=(mb.address||'').split('\n').filter(Boolean);
   const logo=mb.logoDataUrl||state.settings.companyLogo;
   const patternStyle=state.settings.headerPattern?` style="background-image:url('${escapeAttr(state.settings.headerPattern)}')"`:'';
+  const concept=getConceptPhoto(mb.id,null);
   return `
     <div class="diamond-banner"${patternStyle}></div>
     <div class="mb-title">${escapeHtml(mb.projectTitle||'September')}</div>
     <div class="diamond-banner"${patternStyle}></div>
     <div class="mb-motiv-box"><h2>Motiv: ${escapeHtml(mb.motivName||'')}</h2></div>
+    ${concept?`<div class="mb-concept-photo"><img data-photo-id="${concept.id}" src="${concept.thumb}"></div>`:''}
     <div class="mb-info-row">
       <div class="mb-address-box">
         ${addressLines.length?`<div class="mb-label">Motiv-Adresse:</div>${addressLines.map((l,i)=>`<div${i===0?' class="mb-bold"':''}>${escapeHtml(l)}</div>`).join('')}`:''}
@@ -1973,6 +2034,16 @@ function paginateUntermotivForPrint(mb,u,photos,notesLines){
   head.className='mb-untermotiv-head';
   head.innerHTML=`<h3>${escapeHtml(u.title||'')}</h3>${u.ref?`<div class="mb-ref">${escapeHtml(u.ref)}</div>`:''}`;
   box.appendChild(head);
+  // Konzeptbild (falls vorhanden) erscheint nur auf der ersten Seite dieses
+  // Untermotivs — wird vor der ersten Fotos/Notizen-Runde wieder entfernt.
+  const uConcept=getConceptPhoto(mb.id, u.id!=='_leer'?u.id:null);
+  let conceptEl=null;
+  if(uConcept){
+    conceptEl=document.createElement('div');
+    conceptEl.className='mb-concept-photo';
+    conceptEl.innerHTML=`<img src="${uConcept.thumb||''}">`;
+    box.appendChild(conceptEl);
+  }
   const photoRow=document.createElement('div');
   photoRow.className='mb-photo-row';
   box.appendChild(photoRow);
@@ -1985,6 +2056,7 @@ function paginateUntermotivForPrint(mb,u,photos,notesLines){
   const chunks=[];
 
   do{
+    if(chunks.length===1 && conceptEl && conceptEl.parentNode){ box.removeChild(conceptEl); } // nur Seite 1
     const budget=pageContentHeight-(chunks.length===0?headerHeight:0);
     photoRow.innerHTML=''; notesList.innerHTML='';
     const chunkPhotos=[], chunkNotes=[];
@@ -2034,7 +2106,7 @@ function renderMotivblattPrint(){
   const untermotive=(mb.untermotive&&mb.untermotive.length)?mb.untermotive:[{id:'_leer',title:'',ref:'',notes:''}];
   const sheets=[];
   untermotive.forEach(u=>{
-    const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id);
+    const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id&&p.role!=='concept');
     const notesLines=(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
     const chunks=(photos.length||notesLines.length)?paginateUntermotivForPrint(mb,u,photos,notesLines):[{photos:[],notes:[]}];
     chunks.forEach((chunk,idx)=>{
@@ -2086,13 +2158,15 @@ function motivblattStyleAttr(){
   return `font-family:${font.css};color:${textColor};--mb-scale:${scale};--mb-weight:${weight};--mb-italic:${italic};--mb-underline:${underline};--mb-textcolor:${textColor};--mb-boxbg:${boxBg}`;
 }
 function renderMotivblattSheetHTML(mb,u,photosOverride,hideHeader,notesOverride){
-  const photos=photosOverride||(u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id));
+  const photos=photosOverride||(u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id&&p.role!=='concept'));
   const notesLines=notesOverride!=null?notesOverride:(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
   const headerHtml=hideHeader?'':mbProjectHeaderHTML(mb);
+  const uConcept=hideHeader?null:getConceptPhoto(mb.id, u.id!=='_leer'?u.id:null);
   return `<div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
     ${headerHtml}
     ${(u.title||u.ref||photos.length||notesLines.length)?`<div class="mb-untermotiv-box">
       <div class="mb-untermotiv-head"><h3>${escapeHtml(u.title||'')}</h3>${u.ref?`<div class="mb-ref">${escapeHtml(u.ref)}</div>`:''}</div>
+      ${uConcept?`<div class="mb-concept-photo"><img data-photo-id="${uConcept.id}" src="${uConcept.thumb}"></div>`:''}
       ${photos.length?`<div class="mb-photo-row">${photos.map(p=>{
         const info=photoSizeInfo(p);
         return `<div class="mb-photo" style="grid-column:span ${info.span}"><img data-photo-id="${p.id}" src="${p.thumb}" style="height:${info.height}px">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}</div>`;
@@ -3032,6 +3106,7 @@ document.addEventListener('click', async (e)=>{
     case 'add-untermotiv': addUntermotiv(); break;
     case 'del-untermotiv': deleteUntermotiv(t.dataset.uid); break;
     case 'upload-logo': document.getElementById('mbf-logo-file')?.click(); break;
+    case 'upload-concept-photo': uploadConceptPhoto(t.dataset.motivblattId, t.dataset.untermotivId||null); break;
     case 'upload-header-pattern': document.getElementById('mbf-pattern-file')?.click(); break;
     case 'reset-header-pattern': state.settings.headerPattern=DEFAULT_HEADER_PATTERN; await saveSettings(); render(); toast('Standard-Rautenmuster wiederhergestellt'); break;
     case 'reset-mb-style': state.settings.motivblattStyle={...DEFAULT_MB_STYLE}; await saveSettings(); render(); toast('Design zurückgesetzt'); break;
