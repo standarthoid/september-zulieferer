@@ -1992,12 +1992,12 @@ function mbPageContentHeightPx(){
 }
 // Der Projekt-Kopf (Rautenbanner/Titel/Motiv/Adresse/Logo) — eigene Funktion, damit
 // sowohl der echte Ausdruck als auch die Höhen-Messung exakt dasselbe Markup nutzen.
-function mbProjectHeaderHTML(mb,showConcept){
+function mbProjectHeaderHTML(mb){
   const contacts=mb.contacts||[];
   const addressLines=(mb.address||'').split('\n').filter(Boolean);
   const logo=mb.logoDataUrl||state.settings.companyLogo;
   const patternStyle=state.settings.headerPattern?` style="background-image:url('${escapeAttr(state.settings.headerPattern)}')"`:'';
-  const concept=showConcept?getConceptPhoto(mb.id,null):null;
+  const concept=getConceptPhoto(mb.id,null);
   return `
     <div class="diamond-banner"${patternStyle}></div>
     <div class="mb-title">${escapeHtml(mb.projectTitle||'September')}</div>
@@ -2018,13 +2018,13 @@ function mbProjectHeaderHTML(mb,showConcept){
 // Inhalt, der über den Blattrand hinausläuft (abgeschnitten würde), und keine großen
 // Lücken mehr, weil Notizen, die nicht mehr neben die Fotos passen, automatisch mit auf
 // die Fortsetzungsseite wandern, statt einfach über den Rand hinauszulaufen.
-function paginateUntermotivForPrint(mb,u,photos,notesLines,showTopConcept){
+function paginateUntermotivForPrint(mb,u,photos,notesLines,showHeader){
   const scratch=document.createElement('div');
   scratch.className='mb-sheet';
   scratch.setAttribute('style',`position:fixed;left:-9999px;top:0;visibility:hidden;width:210mm;max-width:none;${motivblattStyleAttr()}`);
   document.body.appendChild(scratch);
 
-  const headerHtml=mbProjectHeaderHTML(mb,showTopConcept);
+  const headerHtml=showHeader?mbProjectHeaderHTML(mb):'';
   const headerEl=document.createElement('div');
   headerEl.innerHTML=headerHtml;
   scratch.appendChild(headerEl);
@@ -2119,23 +2119,24 @@ function renderMotivblattPrint(){
   if(!mb){ el.innerHTML=`<div class="empty">Motivblatt nicht gefunden</div>`; return; }
   const untermotive=(mb.untermotive&&mb.untermotive.length)?mb.untermotive:[{id:'_leer',title:'',ref:'',notes:''}];
   const sheets=[];
-  // Das Konzeptbild des Motivs (nicht das je Untermotiv!) erscheint nur EINMAL im
-  // ganzen Dokument, auf der allerersten Seite — sonst würde es bei mehreren
-  // Untermotiven mehrfach wiederholt (und würde unnötig viel Platz beanspruchen).
-  let topConceptShown=false;
+  // Der volle Kopfbereich (Banner/Projekt-Titel/Motiv-Box/Adresse/Ansprechpartner*innen/
+  // Logo/Konzeptbild) erscheint nur EINMAL im ganzen Dokument, auf der allerersten
+  // Seite. Jedes weitere Untermotiv-Blatt zeigt nur noch den Untermotiv-Titel, dessen
+  // eigenes Konzeptbild (falls vorhanden) und die Fotos/Notizen dazu.
+  let headerShown=false;
   untermotive.forEach(u=>{
     const photos=u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id&&p.role!=='concept');
     const notesLines=(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
-    const showTopConcept=!topConceptShown;
-    const chunks=(photos.length||notesLines.length)?paginateUntermotivForPrint(mb,u,photos,notesLines,showTopConcept):[{photos:[],notes:[]}];
+    const showHeaderHere=!headerShown;
+    const chunks=(photos.length||notesLines.length)?paginateUntermotivForPrint(mb,u,photos,notesLines,showHeaderHere):[{photos:[],notes:[]}];
     chunks.forEach((chunk,idx)=>{
-      const hideHeader=idx>0;
+      const hideHeader=!(showHeaderHere&&idx===0);
       const uPart=chunks.length>1
         ? {...u, title:(u.title||'')+` (Fortsetzung ${idx+1}/${chunks.length})`}
         : u;
-      sheets.push(renderMotivblattSheetHTML(mb,uPart,chunk.photos,hideHeader,chunk.notes,showTopConcept&&!hideHeader));
+      sheets.push(renderMotivblattSheetHTML(mb,uPart,chunk.photos,hideHeader,chunk.notes,idx===0));
     });
-    if(showTopConcept) topConceptShown=true;
+    if(showHeaderHere) headerShown=true;
   });
   el.innerHTML=`
     <div class="mb-print-wrap">
@@ -2177,11 +2178,11 @@ function motivblattStyleAttr(){
   const boxBg=`rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`;
   return `font-family:${font.css};color:${textColor};--mb-scale:${scale};--mb-weight:${weight};--mb-italic:${italic};--mb-underline:${underline};--mb-textcolor:${textColor};--mb-boxbg:${boxBg}`;
 }
-function renderMotivblattSheetHTML(mb,u,photosOverride,hideHeader,notesOverride,showTopConcept){
+function renderMotivblattSheetHTML(mb,u,photosOverride,hideHeader,notesOverride,showUntermotivConcept){
   const photos=photosOverride||(u.id==='_leer'?[]:state.photos.filter(p=>p.motivblattId===mb.id&&p.untermotivId===u.id&&p.role!=='concept'));
   const notesLines=notesOverride!=null?notesOverride:(u.notes||'').split('\n').map(l=>l.trim()).filter(Boolean);
-  const headerHtml=hideHeader?'':mbProjectHeaderHTML(mb,showTopConcept!==false);
-  const uConcept=hideHeader?null:getConceptPhoto(mb.id, u.id!=='_leer'?u.id:null);
+  const headerHtml=hideHeader?'':mbProjectHeaderHTML(mb);
+  const uConcept=showUntermotivConcept===false?null:getConceptPhoto(mb.id, u.id!=='_leer'?u.id:null);
   return `<div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
     ${headerHtml}
     ${(u.title||u.ref||photos.length||notesLines.length)?`<div class="mb-untermotiv-box">
