@@ -224,7 +224,7 @@
 
   /* Druck-/Vorschau-Blatt: bewusst eigenes Farbschema, das die Vorlage nachbildet */
   .mb-print-wrap{background:#e9edf0;padding:24px 0;min-height:100vh}
-  .mb-sheet{width:210mm;max-width:94vw;min-height:297mm;margin:0 auto 24px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.15);padding:14mm 12mm;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;color:var(--mb-textcolor,#1a1a1a)}
+  .mb-sheet{width:210mm;max-width:94vw;min-height:297mm;margin:0 auto 24px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.15);padding:20mm 12mm;box-sizing:border-box;font-family:Georgia,'Times New Roman',serif;color:var(--mb-textcolor,#1a1a1a)}
   .diamond-banner{height:26px;background-repeat:repeat-x;background-size:auto 100%;background-color:#fff;border:1px solid #bfe3f5}
   .mb-pattern-preview{height:32px;width:100%;background-repeat:repeat-x;background-size:auto 100%;border:1px solid var(--line);border-radius:8px}
   .mb-title{text-align:center;font-style:var(--mb-italic,italic);text-decoration:var(--mb-underline,none);font-size:calc(38px * var(--mb-scale,1));margin:10px 0;font-weight:var(--mb-weight,600)}
@@ -1974,7 +1974,11 @@ function photoSizeInfo(p){ return PHOTO_SIZE_INFO[p?.printSize]||PHOTO_SIZE_INFO
 // kleinen Mess-/Rundungsungenauigkeiten nie über den Blattrand hinaus gedruckt wird
 // (sonst schneidet der Drucker oben/unten etwas ab). Wird per echter DOM-Messung
 // ermittelt statt geschätzt, damit es zur tatsächlichen CSS-Vorlage passt.
-const MB_PAGE_SAFETY_BUFFER_MM = 6;
+// Bewusst großzügig: das eigentliche "Drucken/Als PDF speichern" (window.print) kann
+// je nach Browser/Betriebssystem eigene, zusätzliche Rand-/Skalierungslogik anwenden,
+// die von der Bildschirm-Vorschau abweicht — nur ein deutlicher Puffer verhindert
+// dort zuverlässig Überlauf, den man in der Vorschau gar nicht sieht.
+const MB_PAGE_SAFETY_BUFFER_MM = 14;
 let _mbPageContentHeightPx = null;
 function mbPageContentHeightPx(){
   if(_mbPageContentHeightPx!=null) return _mbPageContentHeightPx;
@@ -2076,9 +2080,14 @@ function paginateMotivblattForPrint(mb,untermotive){
       if(!isFirstFragment && conceptEl && conceptEl.parentNode){ box.removeChild(conceptEl); }
       let fragHeight=0, chunkPhotos=[], chunkNotes=[];
       // Bis zu 2 Versuche: erst mit dem Rest-Platz der aktuellen (evtl. schon von
-      // einem vorherigen Untermotiv belegten) Seite; passt gar nichts mehr rein UND
-      // die Seite hat schon anderen Inhalt, auf einer frischen Seite (volles Budget)
-      // noch einmal versuchen — dort passt (mind. per Zwang) garantiert etwas hin.
+      // einem vorherigen Untermotiv belegten) Seite. Passt dort auch nur der Kopf
+      // (0 Fotos/Notizen) nicht mehr rein, auf einer frischen Seite (volles Budget)
+      // noch einmal versuchen. WICHTIG: auf Versuch 0 wird NIE ein Foto/Notiz
+      // erzwungen — sonst könnte genau dieses erzwungene Element über den echten
+      // Blattrand hinauslaufen (im Browser unauffällig, beim Drucken/als PDF
+      // speichern aber sichtbar kaputt). Erzwingen (mind. 1 Element, gegen
+      // Endlosschleifen) passiert nur noch auf Versuch 1 — einer garantiert frischen,
+      // leeren Seite mit vollem Budget, wo praktisch immer genug Platz ist.
       for(let attempt=0; attempt<2; attempt++){
         const budget=pageContentHeight-used;
         const savedPhotoIdx=photoIdx, savedNoteIdx=noteIdx;
@@ -2096,7 +2105,7 @@ function paginateMotivblattForPrint(mb,untermotive){
           el.innerHTML=`<img src="${p.thumb||''}" style="height:${info.height}px">${p.caption?`<div class="mb-caption">${escapeHtml(p.caption)}</div>`:''}`;
           photoRow.appendChild(el);
           const fits=box.getBoundingClientRect().height<=budget;
-          const forceOk=!addedSomething && pageIsEmpty;
+          const forceOk=!addedSomething && attempt===1;
           if(fits||forceOk){
             chunkPhotos.push(p); photoIdx++; addedSomething=true;
             if(fits) continue;
@@ -2111,7 +2120,7 @@ function paginateMotivblattForPrint(mb,untermotive){
           li.textContent=line.replace(/^[-•]\s*/,'');
           notesList.appendChild(li);
           const fits=box.getBoundingClientRect().height<=budget;
-          const forceOk=!addedSomething && pageIsEmpty;
+          const forceOk=!addedSomething && attempt===1;
           if(fits||forceOk){
             chunkNotes.push(line); noteIdx++; addedSomething=true;
             if(fits) continue;
@@ -2161,7 +2170,7 @@ function renderMotivblattPrint(){
         <button class="btn btn-sm" data-action="set-view" data-view="motivblatt-edit">${ic('back')} Zurück zum Bearbeiten</button>
         <button class="btn btn-primary btn-sm" data-action="do-print">${ic('download')} Als PDF drucken/speichern</button>
       </div>
-      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Jede Seite ist fix im DIN-A4-Format, mit Rand oben/unten, damit Drucker nichts abschneiden. Fotos werden nie verkleinert, um mehr auf eine Seite zu quetschen. Untermotive laufen direkt hintereinander weiter, solange noch Platz ist — erst wenn eine Seite wirklich voll ist, geht es auf der nächsten weiter. Für kleinteilige Pläne o.ä. lässt sich die Größe einzelner Fotos beim Bearbeiten auf „Groß"/„Sehr groß" stellen. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" wählen (nicht „An Seite anpassen"), damit das erhalten bleibt.</div>
+      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Jede Seite ist fix im DIN-A4-Format, mit Rand oben/unten, damit Drucker nichts abschneiden. Fotos werden nie verkleinert, um mehr auf eine Seite zu quetschen. Untermotive laufen direkt hintereinander weiter, solange noch Platz ist — erst wenn eine Seite wirklich voll ist, geht es auf der nächsten weiter. Für kleinteilige Pläne o.ä. lässt sich die Größe einzelner Fotos beim Bearbeiten auf „Groß"/„Sehr groß" stellen. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" (nicht „An Seite anpassen") und „Ränder: Keine" wählen, damit das erhalten bleibt.</div>
       ${sheets}
     </div>
   `;
