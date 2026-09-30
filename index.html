@@ -125,6 +125,26 @@
     .cal-day .dloc,.cal-day .dappt{display:inline-block;-webkit-line-clamp:1}
   }
 
+  /* ---- To-Dos ---- */
+  .todo-add-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end}
+  .todo-add-row .todo-text-field{flex:1;min-width:180px}
+  .todo-add-row label{display:block;font-size:10.5px;color:var(--ink-muted);margin-bottom:3px}
+  .todo-add-row input[type="text"],.todo-add-row input[type="date"]{width:100%;border:1px solid var(--line-strong);background:var(--bg-card);border-radius:8px;padding:7px 9px;font:inherit}
+  .todo-reminder{background:var(--terra-soft);color:var(--terra);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:600;margin-bottom:10px}
+  .todo-section-label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-muted);margin:12px 0 6px}
+  .todo-section-label:first-child{margin-top:0}
+  .todo-list{display:flex;flex-direction:column;gap:6px}
+  .todo-item{display:flex;align-items:flex-start;gap:9px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg-card)}
+  .todo-item.overdue{border-color:var(--terra-soft);background:var(--terra-soft)}
+  .todo-item input[type="checkbox"]{margin-top:3px;width:16px;height:16px;flex:none}
+  .todo-item .todo-body{flex:1;min-width:0}
+  .todo-item .todo-text{font-size:13.5px}
+  .todo-item .todo-due{font-size:11px;margin-top:2px;font-weight:600;color:var(--ink-muted)}
+  .todo-item.overdue .todo-due,.todo-due.due-overdue{color:var(--terra)}
+  .todo-due.due-today{color:var(--gold)}
+  .todo-empty{font-size:12.5px;color:var(--ink-muted);padding:4px 0 8px}
+  .todo-done-hint{font-size:11.5px;color:var(--ink-muted);margin-top:8px}
+
   .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
   @media(max-width:720px){.kpi-row{grid-template-columns:1fr 1fr}}
   .kpi{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
@@ -540,7 +560,7 @@ const SEED_ARBEITSPLAN = [{"person": "Barbara", "date": "2026-08-18", "status": 
 const state = {
   view:'dashboard',
   calMonth:new Date(2026,8,1),
-  suppliers:[], appointments:[], photos:[], drehplan:[], arbeitsplan:[], motivblaetter:[], leihlisten:[], leihlistePosten:[],
+  suppliers:[], appointments:[], photos:[], drehplan:[], arbeitsplan:[], motivblaetter:[], leihlisten:[], leihlistePosten:[], todos:[],
   settings:{...DEFAULT_SETTINGS},
   loading:true,
   activeSupplierId:null, activeMotivblattId:null, printMotivblattId:null, activeLeihlisteId:null, printLeihlisteId:null,
@@ -560,6 +580,8 @@ async function loadAll(){
   try{const r=await appStorage.get('leihlisten');if(r?.value)state.leihlisten=JSON.parse(r.value);}catch(e){state.leihlisten=[];}
   try{const r=await appStorage.get('leihlistePosten');if(r?.value)state.leihlistePosten=JSON.parse(r.value);}catch(e){state.leihlistePosten=[];}
   await migrateLeihlistePosten();
+  try{const r=await appStorage.get('todos');if(r?.value)state.todos=JSON.parse(r.value);}catch(e){state.todos=[];}
+  rolloverTodos();
   // Erststart: Drehplan/Arbeitsplan mit extrahierten Daten befüllen, falls noch leer
   if(state.drehplan.length===0 && typeof SEED_DREHPLAN!=='undefined' && SEED_DREHPLAN.length){
     state.drehplan=SEED_DREHPLAN.map(d=>({id:uid(),...d}));
@@ -641,7 +663,18 @@ function dedupeLeihlistePosten(){
   return changed;
 }
 async function saveArbeitsplan(){try{await appStorage.set('arbeitsplan',JSON.stringify(state.arbeitsplan));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+async function saveTodos(){try{await appStorage.set('todos',JSON.stringify(state.todos));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
 async function saveSettings(){try{await appStorage.set('settings',JSON.stringify(state.settings));dbxTriggerSave();}catch(e){toast('Speichern fehlgeschlagen');}}
+// To-Dos ohne Häkchen wandern automatisch auf "heute" weiter, bis sie erledigt
+// werden — so geht nichts unter, das an einem vergangenen Tag offen geblieben ist.
+function rolloverTodos(){
+  const t=todayISO();
+  let changed=false;
+  state.todos.forEach(td=>{
+    if(!td.done && td.date<t){ td.date=t; changed=true; }
+  });
+  if(changed) saveTodos();
+}
 
 /* ============================================================
    DROPBOX-SYNC
@@ -743,7 +776,7 @@ function dbxBuildPayload(){
   return {
     format:'sep_zulieferer_sync_v1', savedAt:new Date().toISOString(),
     device:navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Mac')?'Mac':navigator.userAgent.includes('Android')?'Android':'Browser',
-    suppliers:state.suppliers, appointments:state.appointments, photos:state.photos, drehplan:state.drehplan, arbeitsplan:state.arbeitsplan, motivblaetter:state.motivblaetter, leihlisten:state.leihlisten, leihlistePosten:state.leihlistePosten,
+    suppliers:state.suppliers, appointments:state.appointments, photos:state.photos, drehplan:state.drehplan, arbeitsplan:state.arbeitsplan, motivblaetter:state.motivblaetter, leihlisten:state.leihlisten, leihlistePosten:state.leihlistePosten, todos:state.todos,
     // Nur die nicht-sensiblen Anzeige-Einstellungen mitsynchronisieren, niemals die Dropbox-Zugangsdaten selbst
     settings:{ companyLogo:state.settings.companyLogo, headerPattern:state.settings.headerPattern, defaultProjectTitle:state.settings.defaultProjectTitle, motivblattStyle:state.settings.motivblattStyle },
   };
@@ -784,6 +817,7 @@ async function dbxLoadFromCloud(){
     if(Array.isArray(data.motivblaetter)) state.motivblaetter=data.motivblaetter;
     if(Array.isArray(data.leihlisten)) state.leihlisten=data.leihlisten;
     if(Array.isArray(data.leihlistePosten)) state.leihlistePosten=data.leihlistePosten;
+    if(Array.isArray(data.todos)) state.todos=data.todos;
     if(data.settings){
       if(data.settings.companyLogo!=null) state.settings.companyLogo=data.settings.companyLogo;
       if(data.settings.headerPattern!=null) state.settings.headerPattern=data.settings.headerPattern;
@@ -791,7 +825,8 @@ async function dbxLoadFromCloud(){
       if(data.settings.motivblattStyle!=null) state.settings.motivblattStyle={...DEFAULT_MB_STYLE,...data.settings.motivblattStyle};
     }
     await migrateLeihlistePosten();
-    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter(); await saveLeihlisten(); await saveLeihlistePosten(); await saveSettings();
+    rolloverTodos();
+    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter(); await saveLeihlisten(); await saveLeihlistePosten(); await saveTodos(); await saveSettings();
     state.dbx.lastSync=new Date().toISOString(); state.dbx.syncStatus='idle'; updateSyncIndicator();
     return true;
   }catch(e){ state.dbx.syncStatus='error'; state.dbx.lastError=e.message; updateSyncIndicator(); return false; }
@@ -1161,11 +1196,82 @@ function arbeitsplanForDate(iso){ return state.arbeitsplan.filter(x=>x.date===is
 function apptSupplierName(a){ const s=state.suppliers.find(x=>x.id===a.supplierId); return (s?s.name+': ':'')+a.title; }
 function dpPillClass(type){ return type==='privat'?'privat':type==='dreh-frei'?'frei':(type&&type.includes('unit'))?'unit':'dreh'; }
 
+/* ---------------------------- To-Dos ---------------------------- */
+function renderTodoCard(){
+  rolloverTodos();
+  const t=todayISO();
+  const active=state.todos.filter(td=>!td.done).sort((a,b)=>a.date.localeCompare(b.date)||(a.dueDate||'9999-99-99').localeCompare(b.dueDate||'9999-99-99'));
+  const today=active.filter(td=>td.date===t);
+  const future=active.filter(td=>td.date>t);
+  const dueReminders=active.filter(td=>td.dueDate && td.dueDate<=t);
+  const doneToday=state.todos.filter(td=>td.done && td.date===t).length;
+  return `<div class="card pad" style="margin-bottom:16px">
+    <div class="row between" style="margin-bottom:10px"><h3 style="font-size:15px">To-Dos</h3></div>
+    <div class="todo-add-row">
+      <div class="todo-text-field"><label>Neues To-Do</label><input type="text" id="todo-text" placeholder="z.B. Angebot anfragen"></div>
+      <div><label>Für</label><input type="date" id="todo-date" value="${t}"></div>
+      <div><label>Frist (optional)</label><input type="date" id="todo-due"></div>
+      <button class="btn btn-primary btn-sm" data-action="add-todo">${ic('plus')} Hinzufügen</button>
+    </div>
+    ${dueReminders.length?`<div class="todo-reminder">${ic('clock')} Erinnerung: ${dueReminders.length} To-Do${dueReminders.length===1?'':'s'} mit Frist heute oder überfällig!</div>`:''}
+    <div class="todo-section-label">Heute</div>
+    ${today.length?`<div class="todo-list">${today.map(renderTodoItem).join('')}</div>`:`<div class="todo-empty">Keine offenen To-Dos für heute.</div>`}
+    ${future.length?`<div class="todo-section-label">Demnächst</div><div class="todo-list">${future.map(renderTodoItem).join('')}</div>`:''}
+    ${doneToday?`<div class="todo-done-hint">${ic('check')} ${doneToday} heute erledigt</div>`:''}
+  </div>`;
+}
+function renderTodoItem(td){
+  const t=todayISO();
+  const isOverdueDue=td.dueDate && td.dueDate<t;
+  const isTodayDue=td.dueDate && td.dueDate===t;
+  return `<div class="todo-item${isOverdueDue?' overdue':''}">
+    <input type="checkbox" data-action="toggle-todo" data-id="${td.id}">
+    <div class="todo-body">
+      <div class="todo-text">${escapeHtml(td.text)}${td.date>t?` <span style="color:var(--ink-muted);font-weight:400">(${fmtDate(td.date,{day:'2-digit',month:'2-digit'})})</span>`:''}</div>
+      ${td.dueDate?`<div class="todo-due${isOverdueDue?' due-overdue':isTodayDue?' due-today':''}">Frist: ${escapeHtml(fmtDate(td.dueDate))}${isOverdueDue?' (überfällig)':isTodayDue?' (heute)':''}</div>`:''}
+    </div>
+    <button class="iconbtn btn-sm btn-danger" data-action="del-todo" data-id="${td.id}" title="Löschen">${ic('trash')}</button>
+  </div>`;
+}
+function bindTodoAddEvents(){
+  const textInp=document.getElementById('todo-text');
+  if(textInp) textInp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); addTodoFromForm(); } });
+}
+function addTodoFromForm(){
+  const textInp=document.getElementById('todo-text');
+  const dateInp=document.getElementById('todo-date');
+  const dueInp=document.getElementById('todo-due');
+  if(!textInp) return;
+  const text=textInp.value.trim();
+  if(!text){ toast('Bitte einen To-Do-Text eingeben'); textInp.focus(); return; }
+  const date=dateInp.value||todayISO();
+  const dueDate=dueInp.value||null;
+  state.todos.push({id:uid(), text, date, dueDate, done:false, createdAt:new Date().toISOString()});
+  saveTodos();
+  render();
+  toast('To-Do hinzugefügt');
+}
+function toggleTodoDone(id){
+  const td=state.todos.find(x=>x.id===id); if(!td) return;
+  td.done=!td.done;
+  saveTodos();
+  render();
+}
+function deleteTodo(id){
+  const idx=state.todos.findIndex(x=>x.id===id); if(idx===-1) return;
+  const [td]=state.todos.splice(idx,1);
+  saveTodos(); render();
+  pushUndo(`To-Do „${td.text}" gelöscht`, async ()=>{
+    state.todos.splice(Math.min(idx,state.todos.length),0,td);
+    await saveTodos(); render();
+  });
+}
 function renderDashboard(){
   const el=document.getElementById('view-dashboard');
   const t=todayISO();
   const upcoming=state.appointments.filter(a=>a.date>=t).sort((a,b)=>a.date.localeCompare(b.date)||(a.startTime||'').localeCompare(b.startTime||'')).slice(0,5);
   el.innerHTML=`
+    ${renderTodoCard()}
     <div class="kpi-row">
       <div class="kpi"><div class="n">${state.suppliers.length}</div><div class="l">Zulieferer</div></div>
       <div class="kpi"><div class="n">${state.appointments.filter(a=>a.date>=t).length}</div><div class="l">Anstehende Termine</div></div>
@@ -1186,6 +1292,7 @@ function renderDashboard(){
     <div class="row between" style="margin-bottom:8px"><h3 style="font-size:15px">Nächste Termine</h3><button class="btn btn-sm" data-action="set-view" data-view="appointments">Alle ansehen</button></div>
     ${upcoming.length? `<div class="appt-list">${upcoming.map(a=>renderApptItem(a)).join('')}</div>` : `<div class="empty">${ic('calendar')}<div>Noch keine anstehenden Termine</div></div>`}
   `;
+  bindTodoAddEvents();
 }
 function renderCalGrid(){
   const first=new Date(state.calMonth.getFullYear(),state.calMonth.getMonth(),1);
@@ -3068,7 +3175,7 @@ async function importArbeitsplanFile(file){
 
 /* ---------------------------- Backup Export/Import ---------------------------- */
 function exportBackup(){
-  const payload={format:'sep_zulieferer_backup_v1',savedAt:new Date().toISOString(),suppliers:state.suppliers,appointments:state.appointments,photos:state.photos,drehplan:state.drehplan,arbeitsplan:state.arbeitsplan,motivblaetter:state.motivblaetter,leihlisten:state.leihlisten,leihlistePosten:state.leihlistePosten,
+  const payload={format:'sep_zulieferer_backup_v1',savedAt:new Date().toISOString(),suppliers:state.suppliers,appointments:state.appointments,photos:state.photos,drehplan:state.drehplan,arbeitsplan:state.arbeitsplan,motivblaetter:state.motivblaetter,leihlisten:state.leihlisten,leihlistePosten:state.leihlistePosten,todos:state.todos,
     settings:{companyLogo:state.settings.companyLogo,headerPattern:state.settings.headerPattern,defaultProjectTitle:state.settings.defaultProjectTitle,motivblattStyle:state.settings.motivblattStyle}};
   downloadFile('september-zulieferer-backup-'+todayISO()+'.json',JSON.stringify(payload,null,2),'application/json');
 }
@@ -3084,6 +3191,7 @@ async function importBackupFile(file){
     if(Array.isArray(data.motivblaetter)) state.motivblaetter=data.motivblaetter;
     if(Array.isArray(data.leihlisten)) state.leihlisten=data.leihlisten;
     if(Array.isArray(data.leihlistePosten)) state.leihlistePosten=data.leihlistePosten;
+    if(Array.isArray(data.todos)) state.todos=data.todos;
     if(data.settings){
       if(data.settings.companyLogo!=null) state.settings.companyLogo=data.settings.companyLogo;
       if(data.settings.headerPattern!=null) state.settings.headerPattern=data.settings.headerPattern;
@@ -3091,7 +3199,8 @@ async function importBackupFile(file){
       if(data.settings.motivblattStyle!=null) state.settings.motivblattStyle={...DEFAULT_MB_STYLE,...data.settings.motivblattStyle};
     }
     await migrateLeihlistePosten();
-    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter(); await saveLeihlisten(); await saveLeihlistePosten(); await saveSettings();
+    rolloverTodos();
+    await saveSuppliers(); await saveAppointments(); await savePhotos(); await saveDrehplan(); await saveArbeitsplan(); await saveMotivblaetter(); await saveLeihlisten(); await saveLeihlistePosten(); await saveTodos(); await saveSettings();
     toast('Sicherung geladen'); closeModal(); render();
   }catch(e){ toast('Fehler beim Laden: '+e.message); }
 }
@@ -3129,6 +3238,9 @@ document.addEventListener('click', async (e)=>{
     case 'cal-prev': state.calMonth=new Date(state.calMonth.getFullYear(),state.calMonth.getMonth()-1,1); render(); break;
     case 'cal-next': state.calMonth=new Date(state.calMonth.getFullYear(),state.calMonth.getMonth()+1,1); render(); break;
     case 'cal-today': state.calMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1); render(); break;
+    case 'add-todo': addTodoFromForm(); break;
+    case 'toggle-todo': toggleTodoDone(t.dataset.id); break;
+    case 'del-todo': deleteTodo(t.dataset.id); break;
     case 'add-dp-row': addDrehplanRow(); break;
     case 'export-dp-json': exportDrehplanJSON(); break;
     case 'import-dp-json': document.getElementById('dp-import-file')?.click(); break;
