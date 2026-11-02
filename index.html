@@ -1460,7 +1460,7 @@ function renderSupplierDetail(){
 
     <div class="row between" style="margin:18px 0 8px"><h3 style="font-size:15px">Fotos (gelieferte Produkte)</h3></div>
     <div class="drop-zone" id="photo-drop" style="margin-bottom:10px">
-      ${ic('camera')}<div style="margin-top:6px;font-size:12.5px">Fotos hierher ziehen oder klicken zum Hochladen</div>
+      ${ic('camera')}<div style="margin-top:6px;font-size:12.5px">Fotos hierher ziehen, klicken zum Hochladen oder per Strg/Cmd+V einfügen</div>
       <input type="file" id="photo-file" accept="image/*" multiple style="display:none">
     </div>
     ${photos.length? `<div class="photo-grid">${photos.map(renderPhotoThumb).join('')}</div>` : `<div class="empty" style="padding:20px">Noch keine Fotos</div>`}
@@ -1860,7 +1860,7 @@ function renderUntermotivCard(mb,u){
       ${renderConceptImageField(mb.id, u.id)}
     </div>
     <div class="drop-zone" style="margin-bottom:8px">
-      ${ic('camera')}<div style="margin-top:4px;font-size:12px">Fotos hierher ziehen oder klicken zum Hochladen</div>
+      ${ic('camera')}<div style="margin-top:4px;font-size:12px">Fotos hierher ziehen, klicken zum Hochladen oder per Strg/Cmd+V in dieses Untermotiv einfügen</div>
       <input type="file" class="mb-photo-file" accept="image/*" multiple style="display:none">
     </div>
     ${photos.length?`<div class="mb-photo-edit-grid">${photos.map(p=>`
@@ -2425,7 +2425,7 @@ function renderLeihlisteEdit(){
       <button class="btn btn-sm" data-action="add-empty-posten" data-id="${ll.id}">${ic('plus')} Gegenstand ohne Foto</button>
     </div>
     <div class="drop-zone" id="ll-drop" style="margin-bottom:12px">
-      ${ic('camera')}<div style="margin-top:4px;font-size:12.5px">Foto(s) hierher ziehen oder klicken — jedes Foto wird ein eigener Posten mit eigener Gegenstandsliste. Weitere Fotos zu einem Posten (z.B. Rückseite) lassen sich direkt bei diesem Posten ergänzen. Gegenstände ganz ohne Foto lassen sich oben rechts hinzufügen.</div>
+      ${ic('camera')}<div style="margin-top:4px;font-size:12.5px">Foto(s) hierher ziehen, klicken oder einfügen (Strg/Cmd+V) — jedes Foto wird ein eigener Posten mit eigener Gegenstandsliste. Weitere Fotos zu einem Posten (z.B. Rückseite) lassen sich direkt bei diesem Posten ergänzen oder einfügen. Gegenstände ganz ohne Foto lassen sich oben rechts hinzufügen.</div>
       <input type="file" id="ll-photo-file" accept="image/*" multiple style="display:none">
     </div>
     <div id="ll-entries">${posten.map(renderLeihlistePosten).join('')}</div>
@@ -2703,7 +2703,7 @@ function renderVerkaufslisteEdit(){
       <button class="btn btn-sm" data-action="add-empty-artikel" data-id="${vl.id}">${ic('plus')} Artikel ohne Foto</button>
     </div>
     <div class="drop-zone" id="vl-drop" style="margin-bottom:12px">
-      ${ic('camera')}<div style="margin-top:4px;font-size:12.5px">Foto(s) hierher ziehen oder klicken — jedes Foto wird ein eigener Artikel. Weitere Fotos zu einem Artikel (z.B. Rückseite) lassen sich direkt bei diesem Artikel ergänzen.</div>
+      ${ic('camera')}<div style="margin-top:4px;font-size:12.5px">Foto(s) hierher ziehen, klicken oder einfügen (Strg/Cmd+V) — jedes Foto wird ein eigener Artikel. Weitere Fotos zu einem Artikel (z.B. Rückseite) lassen sich direkt bei diesem Artikel ergänzen oder einfügen.</div>
       <input type="file" id="vl-photo-file" accept="image/*" multiple style="display:none">
     </div>
     <div id="vl-entries">${artikel.map(renderVerkaufsartikelRow).join('')}</div>
@@ -3603,6 +3603,59 @@ async function importBackupFile(file){
     toast('Sicherung geladen'); closeModal(); render();
   }catch(e){ toast('Fehler beim Laden: '+e.message); }
 }
+
+/* ---------------------------- Foto per Copy &amp; Paste einfügen ---------------------------- */
+// Strg/Cmd+V mit einem Bild in der Zwischenablage (Screenshot, kopiertes Foto o.ä.)
+// fügt es als Foto ein — dort, wo man gerade klickt/tippt: in ein Feld eines
+// bestimmten Artikels/Postens/Untermotivs eingefügt landet es genau dort, sonst
+// (z.B. irgendwo auf der Seite) wird wie beim Hauptbereich ein neuer Eintrag
+// daraus. Reiner Text-Paste wird dabei nicht angetastet.
+document.addEventListener('paste', async (e)=>{
+  const items=e.clipboardData?.items; if(!items) return;
+  const files=[];
+  for(const item of items){
+    if(item.kind==='file' && item.type && item.type.startsWith('image/')){
+      const file=item.getAsFile();
+      if(file) files.push(file);
+    }
+  }
+  if(!files.length) return; // kein Bild dabei -> normales Text-Einfügen nicht stören
+  e.preventDefault();
+
+  const active=document.activeElement;
+  const artikelEntry=active?.closest?.('[data-artikel-id]');
+  const postenEntry=active?.closest?.('[data-posten-id]');
+  const untermotivCard=active?.closest?.('[data-uid]');
+
+  if(state.view==='verkaufsliste-edit'){
+    if(artikelEntry){
+      const a=state.verkaufsartikel.find(x=>x.id===artikelEntry.dataset.artikelId);
+      if(a){ const added=await addPhotos(files,{verkaufslisteId:a.verkaufslisteId,artikelId:a.id}); photoUploadToast(added); render(); return; }
+    }
+    const vl=state.verkaufslisten.find(x=>x.id===state.activeVerkaufslisteId);
+    if(vl){ await addPhotosAsNewArtikel(files,vl.id); return; }
+  }
+  if(state.view==='leihliste-edit'){
+    if(postenEntry){
+      const p=state.leihlistePosten.find(x=>x.id===postenEntry.dataset.postenId);
+      if(p){ const added=await addPhotos(files,{leihlisteId:p.leihlisteId,postenId:p.id}); photoUploadToast(added); render(); return; }
+    }
+    const ll=state.leihlisten.find(x=>x.id===state.activeLeihlisteId);
+    if(ll){ await addPhotosAsNewPosten(files,ll.id); return; }
+  }
+  if(state.view==='motivblatt-edit' && untermotivCard){
+    const mb=state.motivblaetter.find(x=>x.id===state.activeMotivblattId);
+    if(mb){
+      const added=await addPhotos(files,{motivblattId:mb.id,untermotivId:untermotivCard.dataset.uid});
+      photoUploadToast(added); render(); return;
+    }
+  }
+  if(state.view==='supplier-detail' && state.activeSupplierId){
+    const added=await addPhotos(files,{supplierId:state.activeSupplierId});
+    photoUploadToast(added); render(); return;
+  }
+  toast('Zum Einfügen bitte vorher auf ein Foto-Feld bzw. in die Bearbeiten-Ansicht klicken');
+});
 
 /* ---------------------------- Globale Event-Delegation ---------------------------- */
 document.addEventListener('click', async (e)=>{
