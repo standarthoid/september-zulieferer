@@ -606,6 +606,13 @@ async function loadAll(){
   rolloverTodos();
   try{const r=await appStorage.get('verkaufslisten');if(r?.value)state.verkaufslisten=JSON.parse(r.value);}catch(e){state.verkaufslisten=[];}
   try{const r=await appStorage.get('verkaufsartikel');if(r?.value)state.verkaufsartikel=JSON.parse(r.value);}catch(e){state.verkaufsartikel=[];}
+  // Bestehende Verkaufslisten (von vor Einführung des Kontakthinweis-Felds)
+  // bekommen den Standardtext einmalig nachgetragen.
+  let vlBackfillChanged=false;
+  state.verkaufslisten.forEach(vl=>{
+    if(vl.kontakthinweis===undefined){ vl.kontakthinweis='Bei Interesse bitte bei Miriam Hanke melden.'; vlBackfillChanged=true; }
+  });
+  if(vlBackfillChanged) await saveVerkaufslisten();
   // Erststart: Drehplan/Arbeitsplan mit extrahierten Daten befüllen, falls noch leer
   if(state.drehplan.length===0 && typeof SEED_DREHPLAN!=='undefined' && SEED_DREHPLAN.length){
     state.drehplan=SEED_DREHPLAN.map(d=>({id:uid(),...d}));
@@ -2625,7 +2632,7 @@ function fmtEUR(n){
 // defekt) — für die betroffenen Artikel lässt sich später ganz normal über den
 // Artikel selbst ein Foto nachtragen.
 async function seedVerkaufsliste(){
-  const vl={id:uid(), title:'Verkaufsliste September', notes:'', createdAt:new Date().toISOString()};
+  const vl={id:uid(), title:'Verkaufsliste September', notes:'', kontakthinweis:'Bei Interesse bitte bei Miriam Hanke melden.', createdAt:new Date().toISOString()};
   state.verkaufslisten.push(vl);
   let order=0;
   for(const row of SEED_VERKAUFSLISTE){
@@ -2663,15 +2670,16 @@ function renderVerkaufslisteCard(vl){
   return `<div class="ll-card" data-action="edit-verkaufsliste" data-id="${vl.id}">
     <div class="llname">${escapeHtml(vl.title||'(ohne Titel)')}</div>
     <div class="llmeta">${artikel.length} Artikel · ${photos.length} Foto${photos.length===1?'':'s'}</div>
-    <div class="row" style="gap:6px;margin-top:6px">
+    <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
       <button class="btn btn-sm" data-action="print-verkaufsliste" data-id="${vl.id}">${ic('download')} Als PDF</button>
+      <button class="btn btn-sm" data-action="export-bestellseite" data-id="${vl.id}">${ic('tag')} Bestellseite</button>
       <button class="iconbtn btn-sm btn-danger" data-action="del-verkaufsliste" data-id="${vl.id}" title="Löschen">${ic('trash')}</button>
     </div>
   </div>`;
 }
 function openVerkaufslisteForm(id){
   if(!id){
-    const vl={id:uid(),title:'',notes:'',createdAt:new Date().toISOString()};
+    const vl={id:uid(),title:'',notes:'',kontakthinweis:'Bei Interesse bitte bei Miriam Hanke melden.',createdAt:new Date().toISOString()};
     state.verkaufslisten.push(vl);
     id=vl.id;
     saveVerkaufslisten();
@@ -2691,12 +2699,15 @@ function renderVerkaufslisteEdit(){
       <button class="btn btn-ghost btn-sm" data-action="set-view" data-view="verkaufslisten">${ic('back')} Zurück</button>
       <div class="row" style="gap:6px">
         <button class="btn btn-sm" data-action="print-verkaufsliste" data-id="${vl.id}">${ic('download')} Als PDF</button>
+        <button class="btn btn-sm" data-action="export-bestellseite" data-id="${vl.id}">${ic('tag')} Bestellseite</button>
         <button class="iconbtn btn-danger" data-action="del-verkaufsliste" data-id="${vl.id}" title="Löschen">${ic('trash')}</button>
       </div>
     </div>
     <div class="card pad stack" style="margin-bottom:16px">
       <div class="field"><label>Titel *</label><input id="vlf-title" value="${escapeAttr(vl.title||'')}" placeholder="z.B. Verkaufsliste September"></div>
+      <div class="field"><label>Kontakthinweis (erscheint auf jeder Seite der Verkaufsliste)</label><input id="vlf-kontakt" value="${escapeAttr(vl.kontakthinweis||'')}" placeholder="z.B. Bei Interesse bitte bei Miriam Hanke melden."></div>
       <div class="field"><label>Notizen (optional)</label><textarea id="vlf-notes" rows="2">${escapeHtml(vl.notes||'')}</textarea></div>
+      <div class="hint">${ic('tag')} „Bestellseite" lädt eine eigenständige HTML-Datei herunter: Interessent*innen können dort Artikel anhaken, die gewünschte Anzahl eintragen und Ihnen die Auswahl per E-Mail schicken. Die Datei enthält den aktuellen Stand der Liste — bei Änderungen (Preise, Fotos, neue Artikel) bitte neu exportieren und erneut weitergeben/hochladen.</div>
     </div>
     <div class="row between" style="margin:0 0 10px">
       <h3 style="font-size:15px">Artikel</h3>
@@ -2745,6 +2756,8 @@ function renderVerkaufsartikelRow(a){
 function bindVerkaufslisteEditEvents(vl){
   const title=document.getElementById('vlf-title');
   if(title) title.addEventListener('input',()=>{ vl.title=title.value; debouncedSaveVerkaufslisten(); });
+  const kontakt=document.getElementById('vlf-kontakt');
+  if(kontakt) kontakt.addEventListener('input',()=>{ vl.kontakthinweis=kontakt.value; debouncedSaveVerkaufslisten(); });
   const notes=document.getElementById('vlf-notes');
   if(notes) notes.addEventListener('input',()=>{ vl.notes=notes.value; debouncedSaveVerkaufslisten(); });
 
@@ -2910,6 +2923,153 @@ async function openVerkaufslistePrint(id){
     try{ img.src=await getPhotoDisplaySrc(p,900); }catch(e){}
   }
 }
+
+/* ---------------------------- Bestellseite (Export) ---------------------------- */
+// Eigenständige, von der App unabhängige HTML-Seite: Interessent*innen können
+// Artikel anhaken, die gewünschte Menge eintragen und sich daraus per Klick eine
+// vorausgefüllte E-Mail an Miriam öffnen lassen. Läuft komplett offline/lokal im
+// Browser der/des Interessierten (kein Server, keine Datenübertragung außer der
+// E-Mail, die die Person selbst über ihr eigenes Mailprogramm verschickt) — die
+// Datei enthält daher einen FESTEN Stand der Liste (inkl. Fotos) zum Zeitpunkt des
+// Exports und muss bei Änderungen neu erzeugt werden.
+const BESTELLSEITE_EMAIL='miriam.hanke@gmail.com';
+async function exportBestellseite(vlId){
+  const vl=state.verkaufslisten.find(x=>x.id===vlId); if(!vl) return;
+  const artikel=sortVerkaufsartikel(state.verkaufsartikel.filter(x=>x.verkaufslisteId===vl.id));
+  if(!artikel.length){ toast('Diese Verkaufsliste hat noch keine Artikel'); return; }
+  toast('Bestellseite wird erstellt …');
+  const items=[];
+  for(const a of artikel){
+    const photos=state.photos.filter(p=>p.artikelId===a.id);
+    const fotos=[];
+    for(const p of photos){
+      try{ fotos.push(await getPhotoDisplaySrc(p,640)); }catch(e){}
+    }
+    items.push({
+      id:a.id,
+      name:a.name||'(ohne Namen)',
+      beschreibung:a.beschreibung||'',
+      anzahl:a.anzahl||'',
+      preisFormatted:fmtEUR(verkaufspreis(a.bruttopreis)),
+      fotos,
+    });
+  }
+  const html=buildBestellseiteHTML(vl,items);
+  const safeTitle=(vl.title||'Verkaufsliste').replace(/[^a-zA-Z0-9äöüÄÖÜß _-]/g,'').trim()||'Verkaufsliste';
+  downloadFile(`Bestellseite_${safeTitle}.html`,html,'text/html');
+  toast('Bestellseite heruntergeladen');
+}
+function buildBestellseiteHTML(vl,items){
+  const logo=state.settings.companyLogo||'';
+  const pattern=state.settings.headerPattern||'';
+  const projectTitle=state.settings.defaultProjectTitle||'September';
+  const itemsHtml=items.map(it=>`
+    <div class="item">
+      <div class="item-photos">
+        ${it.fotos.length?it.fotos.map(src=>`<img src="${src}">`).join(''):'<div class="no-photo">Kein Foto</div>'}
+      </div>
+      <div class="item-body">
+        <h3>${escapeHtml(it.name)}</h3>
+        ${it.beschreibung?`<div class="desc">${escapeHtml(it.beschreibung)}</div>`:''}
+        ${it.anzahl?`<div class="meta">Verfügbar: ${escapeHtml(String(it.anzahl))}</div>`:''}
+        ${it.preisFormatted?`<div class="price">${escapeHtml(it.preisFormatted)}</div>`:''}
+        <label class="select-row">
+          <input type="checkbox" class="item-check" data-id="${escapeAttr(it.id)}">
+          <span>Interesse</span>
+          <span class="qty-wrap">Menge:
+            <input type="number" class="item-qty" data-id="${escapeAttr(it.id)}" value="1" min="1" disabled>
+          </span>
+        </label>
+      </div>
+    </div>`).join('');
+  const itemsJs=JSON.stringify(items.map(it=>({id:it.id,name:it.name,preisFormatted:it.preisFormatted})));
+  const emailJs=JSON.stringify(BESTELLSEITE_EMAIL);
+  const subjectJs=JSON.stringify('Bestellung: '+(vl.title||'Verkaufsliste'));
+  const listNameJs=JSON.stringify(vl.title||'Verkaufsliste');
+  return `<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(vl.title||'Verkaufsliste')}</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#e9edf0;color:#1a1a1a;font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:18px 18px 100px}
+  .banner{height:22px;background-repeat:repeat-x;background-size:auto 100%;background-color:#fff;border:1px solid #bfe3f5;${pattern?`background-image:url('${escapeAttr(pattern)}')`:''}}
+  h1{text-align:center;font-family:Georgia,serif;font-style:italic;font-size:32px;margin:10px 0}
+  .title-box{border:2px solid #6fb8dd;border-radius:2px;padding:10px 16px;margin:14px 0;text-align:center;background:#fff}
+  .title-box h2{font-family:Georgia,serif;font-style:italic;font-size:22px;margin:0}
+  .hint-line{text-align:center;font-weight:700;background:#fff;border:1px solid #6fb8dd;border-radius:8px;padding:10px 14px;margin-bottom:16px}
+  .logo{display:block;max-width:160px;max-height:70px;margin:0 auto 16px}
+  .items{display:flex;flex-direction:column;gap:14px}
+  .item{border:2px solid #6fb8dd;border-radius:6px;background:#eaf6fc;padding:14px;display:flex;gap:14px;flex-wrap:wrap}
+  .item-photos{display:flex;gap:6px;flex-wrap:wrap;flex:none;width:150px}
+  .item-photos img{width:150px;height:150px;object-fit:cover;border-radius:3px;border:1px solid #6fb8dd}
+  .no-photo{width:150px;height:150px;border:1px dashed #6fb8dd;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#888;font-size:12px}
+  .item-body{flex:1;min-width:180px}
+  .item-body h3{font-family:Georgia,serif;font-style:italic;font-size:19px;margin:0 0 4px}
+  .desc{font-size:13px;margin-bottom:6px}
+  .meta{font-size:12px;color:#555;margin-bottom:6px}
+  .price{font-size:21px;font-weight:700;color:#2F5344;margin-bottom:10px}
+  .select-row{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;cursor:pointer}
+  .select-row input[type="checkbox"]{width:19px;height:19px}
+  .qty-wrap{display:flex;align-items:center;gap:6px;margin-left:6px;font-weight:400;font-size:13px}
+  .item-qty{width:56px;padding:4px 6px;border:1px solid #cfc3a5;border-radius:6px;font:inherit}
+  .item-qty:disabled{background:#f1efe8;color:#999}
+  .order-bar{position:sticky;bottom:0;background:#fff;border-top:1px solid #cfc3a5;padding:12px 18px;display:flex;justify-content:center;box-shadow:0 -4px 14px rgba(0,0,0,.08)}
+  #send-btn{background:#2F5344;color:#fff;border:none;border-radius:10px;padding:13px 26px;font-size:15.5px;font-weight:600;cursor:pointer}
+  #send-btn:hover{background:#24402f}
+  .selected-count{text-align:center;font-size:12.5px;color:#666;margin-top:6px}
+</style>
+</head><body>
+<div class="wrap">
+  ${logo?`<img class="logo" src="${escapeAttr(logo)}">`:''}
+  <div class="banner"></div>
+  <h1>${escapeHtml(projectTitle)}</h1>
+  <div class="banner"></div>
+  <div class="title-box"><h2>${escapeHtml(vl.title||'Verkaufsliste')}</h2></div>
+  ${vl.kontakthinweis?`<div class="hint-line">${escapeHtml(vl.kontakthinweis)}</div>`:''}
+  <div class="items">${itemsHtml}</div>
+</div>
+<div class="order-bar">
+  <div>
+    <button id="send-btn" type="button">Auswahl per E-Mail senden</button>
+    <div class="selected-count" id="selected-count">Noch keine Artikel ausgewählt</div>
+  </div>
+</div>
+<script>
+  var EMAIL=${emailJs};
+  var SUBJECT=${subjectJs};
+  var LIST_NAME=${listNameJs};
+  var ITEMS=${itemsJs};
+  function updateCount(){
+    var n=document.querySelectorAll('.item-check:checked').length;
+    document.getElementById('selected-count').textContent = n ? (n+' Artikel ausgewählt') : 'Noch keine Artikel ausgewählt';
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.item-check'), function(cb){
+    cb.addEventListener('change', function(){
+      var qty=document.querySelector('.item-qty[data-id="'+cb.dataset.id+'"]');
+      qty.disabled=!cb.checked;
+      updateCount();
+    });
+  });
+  document.getElementById('send-btn').addEventListener('click', function(){
+    var selected=[];
+    Array.prototype.forEach.call(document.querySelectorAll('.item-check:checked'), function(cb){
+      var id=cb.dataset.id;
+      var qtyInput=document.querySelector('.item-qty[data-id="'+id+'"]');
+      var item=null;
+      for(var i=0;i<ITEMS.length;i++){ if(ITEMS[i].id===id){ item=ITEMS[i]; break; } }
+      if(item) selected.push({name:item.name, qty:(qtyInput.value||'1'), preis:item.preisFormatted});
+    });
+    if(!selected.length){ alert('Bitte mindestens einen Artikel auswählen.'); return; }
+    var lines=selected.map(function(s){
+      return '- '+s.name+' (Menge: '+s.qty+')'+(s.preis?' – ca. '+s.preis+' je Stück':'');
+    });
+    var body='Hallo,\\n\\nich interessiere mich für folgende Artikel aus der Liste "'+LIST_NAME+'":\\n\\n'+lines.join('\\n')+'\\n\\nBitte um Rückmeldung.\\n\\nViele Grüße';
+    window.location.href='mailto:'+EMAIL+'?subject='+encodeURIComponent(SUBJECT)+'&body='+encodeURIComponent(body);
+  });
+<\/script>
+</body></html>`;
+}
 function chunkArray(arr,size){
   const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out;
 }
@@ -2919,25 +3079,27 @@ function chunkArray(arr,size){
 // Bewusst schlanker Kopf (ohne Adress-/Logo-Zeile) — damit auch auf der ersten
 // Seite noch Platz für 3 großformatige Artikel neben dem Kopf bleibt.
 function vkPageHeaderHTML(vl,isFirst){
-  if(!isFirst) return `<div class="mb-motiv-box" style="margin:0 0 14px"><h2>Verkaufsliste: ${escapeHtml(vl.title||'')}</h2></div>`;
+  const kontaktLine=vl.kontakthinweis?`<div class="mb-label" style="text-align:center;margin-bottom:10px;font-weight:700">${escapeHtml(vl.kontakthinweis)}</div>`:'';
+  if(!isFirst) return `<div class="mb-motiv-box" style="margin:0 0 8px"><h2>Verkaufsliste: ${escapeHtml(vl.title||'')}</h2></div>${kontaktLine}`;
   const patternStyle=state.settings.headerPattern?` style="background-image:url('${escapeAttr(state.settings.headerPattern)}')"`:'';
   return `
     <div class="diamond-banner"${patternStyle}></div>
     <div class="mb-title">${escapeHtml(state.settings.defaultProjectTitle||'September')}</div>
     <div class="diamond-banner"${patternStyle}></div>
-    <div class="mb-motiv-box" style="margin-bottom:8px"><h2>Verkaufsliste: ${escapeHtml(vl.title||'')}</h2></div>
-    <div class="mb-label" style="text-align:center;margin-bottom:12px">Preise = 60% des Neupreises (Bruttopreis) · Stand: ${escapeHtml(fmtDate(todayISO()))}</div>`;
+    <div class="mb-motiv-box" style="margin-bottom:6px"><h2>Verkaufsliste: ${escapeHtml(vl.title||'')}</h2></div>
+    <div class="mb-label" style="text-align:center;margin-bottom:8px">Preise = 60% des Neupreises (Bruttopreis) · Stand: ${escapeHtml(fmtDate(todayISO()))}</div>
+    ${kontaktLine}`;
 }
 function renderVerkaufsartikelCardHTML(a){
   const photos=state.photos.filter(p=>p.artikelId===a.id);
-  const imgSize=photos.length>1?93:194;
+  const imgSize=photos.length>1?84:180;
   const imgsHtml=photos.length
     ? photos.map(p=>`<img data-photo-id="${p.id}" src="${p.thumb}" style="width:${imgSize}px;height:${imgSize}px;object-fit:cover;border-radius:3px;border:1px solid #6fb8dd">`).join('')
-    : `<div style="width:194px;height:194px;border:1px dashed #6fb8dd;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;flex:none">Kein Foto</div>`;
+    : `<div style="width:180px;height:180px;border:1px dashed #6fb8dd;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;flex:none">Kein Foto</div>`;
   const vp=verkaufspreis(a.bruttopreis);
   return `<div class="mb-untermotiv-box vk-print-item">
     <div style="display:flex;gap:14px">
-      <div style="width:200px;flex:none;display:flex;gap:6px;flex-wrap:wrap;justify-content:center">${imgsHtml}</div>
+      <div style="width:186px;flex:none;display:flex;gap:6px;flex-wrap:wrap;justify-content:center">${imgsHtml}</div>
       <div style="flex:1;min-width:0">
         <h3 class="vk-print-name">${escapeHtml(a.name||'(ohne Namen)')}</h3>
         ${a.beschreibung?`<div class="vk-print-desc">${escapeHtml(a.beschreibung)}</div>`:''}
@@ -3739,6 +3901,7 @@ document.addEventListener('click', async (e)=>{
     case 'edit-verkaufsliste': openVerkaufslisteForm(t.dataset.id); break;
     case 'del-verkaufsliste': deleteVerkaufsliste(t.dataset.id); break;
     case 'print-verkaufsliste': await openVerkaufslistePrint(t.dataset.id); break;
+    case 'export-bestellseite': await exportBestellseite(t.dataset.id); break;
     case 'del-artikel': deleteArtikel(t.dataset.artikelId); break;
     case 'add-photo-to-artikel': addPhotoToArtikel(t.dataset.artikelId); break;
     case 'add-empty-artikel': addEmptyArtikel(t.dataset.id); break;
