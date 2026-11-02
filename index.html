@@ -2916,20 +2916,28 @@ function chunkArray(arr,size){
 // Leichter Kopf für Fortsetzungsseiten (nur Titelzeile) — der volle Kopf mit
 // Banner/Logo/Hinweistext erscheint nur auf der ersten Seite, damit auf jeder
 // Seite wirklich Platz für 3 großformatige Artikel bleibt.
-function vkPageHeaderHTML(vl,isFirst,notesHtml){
+// Bewusst schlanker Kopf (ohne Adress-/Logo-Zeile) — damit auch auf der ersten
+// Seite noch Platz für 3 großformatige Artikel neben dem Kopf bleibt.
+function vkPageHeaderHTML(vl,isFirst){
   if(!isFirst) return `<div class="mb-motiv-box" style="margin:0 0 14px"><h2>Verkaufsliste: ${escapeHtml(vl.title||'')}</h2></div>`;
-  return mbSheetHeaderHTML('Verkaufsliste: '+(vl.title||''),notesHtml);
+  const patternStyle=state.settings.headerPattern?` style="background-image:url('${escapeAttr(state.settings.headerPattern)}')"`:'';
+  return `
+    <div class="diamond-banner"${patternStyle}></div>
+    <div class="mb-title">${escapeHtml(state.settings.defaultProjectTitle||'September')}</div>
+    <div class="diamond-banner"${patternStyle}></div>
+    <div class="mb-motiv-box" style="margin-bottom:8px"><h2>Verkaufsliste: ${escapeHtml(vl.title||'')}</h2></div>
+    <div class="mb-label" style="text-align:center;margin-bottom:12px">Preise = 60% des Neupreises (Bruttopreis) · Stand: ${escapeHtml(fmtDate(todayISO()))}</div>`;
 }
 function renderVerkaufsartikelCardHTML(a){
   const photos=state.photos.filter(p=>p.artikelId===a.id);
-  const imgSize=photos.length>1?74:154;
+  const imgSize=photos.length>1?93:194;
   const imgsHtml=photos.length
     ? photos.map(p=>`<img data-photo-id="${p.id}" src="${p.thumb}" style="width:${imgSize}px;height:${imgSize}px;object-fit:cover;border-radius:3px;border:1px solid #6fb8dd">`).join('')
-    : `<div style="width:154px;height:154px;border:1px dashed #6fb8dd;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;flex:none">Kein Foto</div>`;
+    : `<div style="width:194px;height:194px;border:1px dashed #6fb8dd;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;flex:none">Kein Foto</div>`;
   const vp=verkaufspreis(a.bruttopreis);
   return `<div class="mb-untermotiv-box vk-print-item">
-    <div style="display:flex;gap:16px">
-      <div style="width:162px;flex:none;display:flex;gap:6px;flex-wrap:wrap;justify-content:center">${imgsHtml}</div>
+    <div style="display:flex;gap:14px">
+      <div style="width:200px;flex:none;display:flex;gap:6px;flex-wrap:wrap;justify-content:center">${imgsHtml}</div>
       <div style="flex:1;min-width:0">
         <h3 class="vk-print-name">${escapeHtml(a.name||'(ohne Namen)')}</h3>
         ${a.beschreibung?`<div class="vk-print-desc">${escapeHtml(a.beschreibung)}</div>`:''}
@@ -2948,7 +2956,6 @@ function renderVerkaufslistePrint(){
   if(!vl){ el.innerHTML=`<div class="empty">Verkaufsliste nicht gefunden</div>`; return; }
   const artikel=sortVerkaufsartikel(state.verkaufsartikel.filter(x=>x.verkaufslisteId===vl.id));
   const pages=chunkArray(artikel,3);
-  const notesHtml=`<div class="mb-label">Preise = 60% des Neupreises (Bruttopreis)</div><div class="mb-label" style="margin-top:10px">Stand: ${escapeHtml(fmtDate(todayISO()))}</div>`;
   el.innerHTML=`
     <div class="mb-print-wrap">
       <div class="mb-sheet-toolbar no-print">
@@ -2958,9 +2965,9 @@ function renderVerkaufslistePrint(){
       <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Maximal 3 Artikel pro Seite, Fotos groß und gut sichtbar. Der Verkaufspreis wird automatisch mit 60% des Bruttopreises berechnet. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" und „Ränder: Keine" wählen.</div>
       ${pages.length?pages.map((pageItems,i)=>`
         <div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
-          ${vkPageHeaderHTML(vl,i===0,notesHtml)}
+          ${vkPageHeaderHTML(vl,i===0)}
           ${pageItems.map(renderVerkaufsartikelCardHTML).join('')}
-        </div>`).join('') : `<div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">${vkPageHeaderHTML(vl,true,notesHtml)}<div style="color:#999">Noch keine Artikel hinzugefügt</div></div>`}
+        </div>`).join('') : `<div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">${vkPageHeaderHTML(vl,true)}<div style="color:#999">Noch keine Artikel hinzugefügt</div></div>`}
     </div>
   `;
 }
