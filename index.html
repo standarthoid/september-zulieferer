@@ -322,6 +322,14 @@
   .vk-price-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
   .vk-price-row input{width:100%}
   .vk-price-row input:disabled{background:var(--green-soft);color:var(--green);font-weight:700;border-color:var(--green-soft)}
+  .vk-sales-section{border-top:1px dashed var(--line-strong);padding-top:8px;margin-top:2px}
+  .vk-sales-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .vk-sales-header>span:first-child{font-size:12px;font-weight:700;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.3px}
+  .vk-sales-summary{font-size:12px;font-weight:600;color:var(--ink-muted);background:var(--bg-sunk);border-radius:999px;padding:2px 9px}
+  .vk-sales-summary.vk-sold-out{color:var(--green);background:var(--green-soft)}
+  .vk-sale-row{display:grid;grid-template-columns:1fr 80px 140px auto;gap:6px;margin-top:6px;align-items:center}
+  .vk-sale-row input{border:1px solid var(--line-strong);background:var(--bg-card);border-radius:8px;padding:6px 8px;font:inherit}
+  .vk-sale-row input[data-vfield="menge"]{text-align:right}
   .vk-print-item{page-break-inside:avoid;break-inside:avoid}
   .vk-print-name{font-style:var(--mb-italic,italic);text-decoration:var(--mb-underline,none);font-size:calc(19px * var(--mb-scale,1));font-weight:var(--mb-weight,600);margin:0 0 4px}
   .vk-print-desc{font-size:calc(12.5px * var(--mb-scale,1));line-height:1.4;margin-bottom:6px}
@@ -2750,7 +2758,42 @@ function renderVerkaufsartikelRow(a){
         <div class="field"><label>Bruttopreis (€)</label><input data-afield="bruttopreis" data-artikel-id="${a.id}" type="number" step="0.01" min="0" value="${a.bruttopreis!=null?a.bruttopreis:''}"></div>
         <div class="field"><label>Verkaufspreis (60%)</label><input id="vk-vp-${a.id}" value="${fmtEUR(verkaufspreis(a.bruttopreis))}" disabled></div>
       </div>
+      ${renderVerkaufeSection(a)}
     </div>
+  </div>`;
+}
+function verkaufteMenge(a){
+  return (a.verkaeufe||[]).reduce((sum,v)=>{ const n=parseFloat(v.menge); return sum+(isFinite(n)?n:0); },0);
+}
+function verkaufSummaryHTML(a){
+  const verkauft=verkaufteMenge(a);
+  const anzahl=parseFloat(a.anzahl);
+  if(isFinite(anzahl)&&anzahl>0){
+    const ausverkauft=verkauft>=anzahl;
+    return {text:`${verkauft} von ${anzahl} verkauft${ausverkauft?' – ausverkauft':''}`, soldOut:ausverkauft};
+  }else if(verkauft>0){
+    return {text:`${verkauft} verkauft`, soldOut:false};
+  }
+  return null;
+}
+function renderVerkaufeSection(a){
+  const verkaeufe=a.verkaeufe||[];
+  const summary=verkaufSummaryHTML(a);
+  return `<div class="vk-sales-section">
+    <div class="vk-sales-header">
+      <span>Verkäufe</span>
+      <span class="vk-sales-summary${summary&&summary.soldOut?' vk-sold-out':''}" id="vk-sales-summary-${a.id}" ${summary?'':'hidden'}>${summary?escapeHtml(summary.text):''}</span>
+      <button class="btn btn-sm" data-action="add-verkauf" data-artikel-id="${a.id}">${ic('plus')} Verkauf eintragen</button>
+    </div>
+    ${verkaeufe.map(v=>renderVerkaufRow(a.id,v)).join('')}
+  </div>`;
+}
+function renderVerkaufRow(artikelId,v){
+  return `<div class="vk-sale-row" data-verkauf-id="${v.id}">
+    <input data-vfield="kaeufer" data-artikel-id="${artikelId}" data-verkauf-id="${v.id}" value="${escapeAttr(v.kaeufer||'')}" placeholder="Käufer*in">
+    <input data-vfield="menge" data-artikel-id="${artikelId}" data-verkauf-id="${v.id}" value="${escapeAttr(v.menge||'')}" placeholder="Menge">
+    <input data-vfield="datum" data-artikel-id="${artikelId}" data-verkauf-id="${v.id}" type="date" value="${escapeAttr(v.datum||'')}">
+    <button class="iconbtn btn-sm btn-danger" data-action="del-verkauf" data-artikel-id="${artikelId}" data-verkauf-id="${v.id}" title="Verkauf löschen">${ic('trash')}</button>
   </div>`;
 }
 function bindVerkaufslisteEditEvents(vl){
@@ -2771,6 +2814,33 @@ function bindVerkaufslisteEditEvents(vl){
         if(vp) vp.value=fmtEUR(verkaufspreis(a.bruttopreis));
       }else{
         a[field]=inp.value;
+      }
+      if(field==='anzahl'){
+        const summaryEl=document.getElementById('vk-sales-summary-'+a.id);
+        const summary=verkaufSummaryHTML(a);
+        if(summaryEl){
+          summaryEl.hidden=!summary;
+          summaryEl.textContent=summary?summary.text:'';
+          summaryEl.classList.toggle('vk-sold-out',!!(summary&&summary.soldOut));
+        }
+      }
+      debouncedSaveVerkaufsartikel();
+    });
+  });
+
+  document.querySelectorAll('#vl-entries [data-vfield]').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      const a=state.verkaufsartikel.find(x=>x.id===inp.dataset.artikelId); if(!a||!a.verkaeufe) return;
+      const v=a.verkaeufe.find(x=>x.id===inp.dataset.verkaufId); if(!v) return;
+      v[inp.dataset.vfield]=inp.value;
+      if(inp.dataset.vfield==='menge'){
+        const summaryEl=document.getElementById('vk-sales-summary-'+a.id);
+        const summary=verkaufSummaryHTML(a);
+        if(summaryEl){
+          summaryEl.hidden=!summary;
+          summaryEl.textContent=summary?summary.text:'';
+          summaryEl.classList.toggle('vk-sold-out',!!(summary&&summary.soldOut));
+        }
       }
       debouncedSaveVerkaufsartikel();
     });
@@ -2890,6 +2960,25 @@ function deleteArtikel(artikelId){
     state.photos.push(...removedPhotos);
     await saveVerkaufsartikel(); await savePhotos(); render();
   }, ()=>{ photoIds.forEach(pid=>appStorage.delete('photoblob:'+pid).catch(()=>{})); });
+}
+function addVerkauf(artikelId){
+  const a=state.verkaufsartikel.find(x=>x.id===artikelId); if(!a) return;
+  if(!a.verkaeufe) a.verkaeufe=[];
+  a.verkaeufe.push({id:uid(), kaeufer:'', menge:'1', datum:todayISO()});
+  saveVerkaufsartikel();
+  render();
+}
+function deleteVerkauf(artikelId,verkaufId){
+  const a=state.verkaufsartikel.find(x=>x.id===artikelId); if(!a||!a.verkaeufe) return;
+  const idx=a.verkaeufe.findIndex(x=>x.id===verkaufId); if(idx===-1) return;
+  const [v]=a.verkaeufe.splice(idx,1);
+  saveVerkaufsartikel();
+  render();
+  pushUndo(`Verkauf an „${v.kaeufer||'Ohne Namen'}" gelöscht`, async ()=>{
+    a.verkaeufe=a.verkaeufe||[];
+    a.verkaeufe.splice(Math.min(idx,a.verkaeufe.length),0,v);
+    await saveVerkaufsartikel(); render();
+  });
 }
 function deleteVerkaufsliste(id){
   if(!confirm('Diese Verkaufsliste inkl. aller Artikel und Fotos löschen?')) return;
@@ -3903,6 +3992,8 @@ document.addEventListener('click', async (e)=>{
     case 'print-verkaufsliste': await openVerkaufslistePrint(t.dataset.id); break;
     case 'export-bestellseite': await exportBestellseite(t.dataset.id); break;
     case 'del-artikel': deleteArtikel(t.dataset.artikelId); break;
+    case 'add-verkauf': addVerkauf(t.dataset.artikelId); break;
+    case 'del-verkauf': deleteVerkauf(t.dataset.artikelId,t.dataset.verkaufId); break;
     case 'add-photo-to-artikel': addPhotoToArtikel(t.dataset.artikelId); break;
     case 'add-empty-artikel': addEmptyArtikel(t.dataset.id); break;
     case 'zoom-photo': openPhotoZoomEditor(t.dataset.id); break;
