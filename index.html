@@ -2622,13 +2622,26 @@ function deleteLeihlistePosten(postenId){
 }
 
 /* ---------------------------- Verkaufsliste ---------------------------- */
-// Verkaufspreis ist immer 60% des Bruttopreises — wird live aus dem
-// Bruttopreis errechnet statt separat gespeichert, bleibt also immer korrekt,
-// auch wenn der Bruttopreis später geändert wird.
-const VERKAUF_FAKTOR=0.6;
-function verkaufspreis(brutto){
+// Verkaufspreis wird live aus dem Bruttopreis errechnet statt separat
+// gespeichert, bleibt also immer korrekt, auch wenn der Bruttopreis später
+// geändert wird. Der Prozentsatz ist pro Verkaufsliste einstellbar
+// (vl.verkaufsfaktor, z.B. 60 für 60%), Standard ist VERKAUF_FAKTOR_DEFAULT.
+const VERKAUF_FAKTOR_DEFAULT=0.6;
+function vkFaktor(vl){
+  const n=parseFloat(vl&&vl.verkaufsfaktor);
+  return (isFinite(n)&&n>0)?n/100:VERKAUF_FAKTOR_DEFAULT;
+}
+function vkFaktorPercent(vl){
+  return Math.round(vkFaktor(vl)*100);
+}
+function verkaufspreis(brutto,faktor){
   const n=typeof brutto==='number'?brutto:parseFloat(brutto);
-  return (brutto!=null&&isFinite(n))?n*VERKAUF_FAKTOR:null;
+  const f=(faktor!=null&&isFinite(faktor))?faktor:VERKAUF_FAKTOR_DEFAULT;
+  return (brutto!=null&&isFinite(n))?n*f:null;
+}
+function verkaufspreisFuerArtikel(a){
+  const vl=state.verkaufslisten.find(x=>x.id===a.verkaufslisteId);
+  return verkaufspreis(a.bruttopreis,vkFaktor(vl));
 }
 function fmtEUR(n){
   if(n==null||!isFinite(n)) return '';
@@ -2714,6 +2727,7 @@ function renderVerkaufslisteEdit(){
     <div class="card pad stack" style="margin-bottom:16px">
       <div class="field"><label>Titel *</label><input id="vlf-title" value="${escapeAttr(vl.title||'')}" placeholder="z.B. Verkaufsliste September"></div>
       <div class="field"><label>Kontakthinweis (erscheint auf jeder Seite der Verkaufsliste)</label><input id="vlf-kontakt" value="${escapeAttr(vl.kontakthinweis||'')}" placeholder="z.B. Bei Interesse bitte bei Miriam Hanke melden."></div>
+      <div class="field"><label>Verkaufspreis (% vom Bruttopreis)</label><input id="vlf-faktor" type="number" min="1" max="100" step="1" value="${vl.verkaufsfaktor!=null?vl.verkaufsfaktor:60}" placeholder="60"></div>
       <div class="field"><label>Notizen (optional)</label><textarea id="vlf-notes" rows="2">${escapeHtml(vl.notes||'')}</textarea></div>
       <div class="hint">${ic('tag')} „Bestellseite" lädt eine eigenständige HTML-Datei herunter: Interessent*innen können dort Artikel anhaken, die gewünschte Anzahl eintragen und Ihnen die Auswahl per E-Mail schicken. Die Datei enthält den aktuellen Stand der Liste — bei Änderungen (Preise, Fotos, neue Artikel) bitte neu exportieren und erneut weitergeben/hochladen.</div>
     </div>
@@ -2756,7 +2770,7 @@ function renderVerkaufsartikelRow(a){
       <div class="vk-price-row">
         <div class="field"><label>Anzahl</label><input data-afield="anzahl" data-artikel-id="${a.id}" value="${escapeAttr(a.anzahl||'')}" placeholder="1"></div>
         <div class="field"><label>Bruttopreis (€)</label><input data-afield="bruttopreis" data-artikel-id="${a.id}" type="number" step="0.01" min="0" value="${a.bruttopreis!=null?a.bruttopreis:''}"></div>
-        <div class="field"><label>Verkaufspreis (60%)</label><input id="vk-vp-${a.id}" value="${fmtEUR(verkaufspreis(a.bruttopreis))}" disabled></div>
+        <div class="field"><label>Verkaufspreis</label><input id="vk-vp-${a.id}" value="${fmtEUR(verkaufspreisFuerArtikel(a))}" disabled></div>
       </div>
       ${renderVerkaufeSection(a)}
     </div>
@@ -2801,6 +2815,15 @@ function bindVerkaufslisteEditEvents(vl){
   if(title) title.addEventListener('input',()=>{ vl.title=title.value; debouncedSaveVerkaufslisten(); });
   const kontakt=document.getElementById('vlf-kontakt');
   if(kontakt) kontakt.addEventListener('input',()=>{ vl.kontakthinweis=kontakt.value; debouncedSaveVerkaufslisten(); });
+  const faktor=document.getElementById('vlf-faktor');
+  if(faktor) faktor.addEventListener('input',()=>{
+    vl.verkaufsfaktor=faktor.value===''?null:parseFloat(faktor.value);
+    debouncedSaveVerkaufslisten();
+    state.verkaufsartikel.filter(x=>x.verkaufslisteId===vl.id).forEach(a=>{
+      const vp=document.getElementById('vk-vp-'+a.id);
+      if(vp) vp.value=fmtEUR(verkaufspreisFuerArtikel(a));
+    });
+  });
   const notes=document.getElementById('vlf-notes');
   if(notes) notes.addEventListener('input',()=>{ vl.notes=notes.value; debouncedSaveVerkaufslisten(); });
 
@@ -2811,7 +2834,7 @@ function bindVerkaufslisteEditEvents(vl){
       if(field==='bruttopreis'){
         a.bruttopreis=inp.value===''?null:parseFloat(inp.value);
         const vp=document.getElementById('vk-vp-'+a.id);
-        if(vp) vp.value=fmtEUR(verkaufspreis(a.bruttopreis));
+        if(vp) vp.value=fmtEUR(verkaufspreisFuerArtikel(a));
       }else{
         a[field]=inp.value;
       }
@@ -3039,7 +3062,7 @@ async function exportBestellseite(vlId){
       name:a.name||'(ohne Namen)',
       beschreibung:a.beschreibung||'',
       anzahl:a.anzahl||'',
-      preisFormatted:fmtEUR(verkaufspreis(a.bruttopreis)),
+      preisFormatted:fmtEUR(verkaufspreisFuerArtikel(a)),
       fotos,
     });
   }
@@ -3176,7 +3199,7 @@ function vkPageHeaderHTML(vl,isFirst){
     <div class="mb-title">${escapeHtml(state.settings.defaultProjectTitle||'September')}</div>
     <div class="diamond-banner"${patternStyle}></div>
     <div class="mb-motiv-box" style="margin-bottom:6px"><h2>Verkaufsliste: ${escapeHtml(vl.title||'')}</h2></div>
-    <div class="mb-label" style="text-align:center;margin-bottom:8px">Preise = 60% des Neupreises (Bruttopreis) · Stand: ${escapeHtml(fmtDate(todayISO()))}</div>
+    <div class="mb-label" style="text-align:center;margin-bottom:8px">Preise = ${vkFaktorPercent(vl)}% des Neupreises (Bruttopreis) · Stand: ${escapeHtml(fmtDate(todayISO()))}</div>
     ${kontaktLine}`;
 }
 function renderVerkaufsartikelCardHTML(a){
@@ -3185,7 +3208,7 @@ function renderVerkaufsartikelCardHTML(a){
   const imgsHtml=photos.length
     ? photos.map(p=>`<img data-photo-id="${p.id}" src="${p.thumb}" style="width:${imgSize}px;height:${imgSize}px;object-fit:cover;border-radius:3px;border:1px solid #6fb8dd">`).join('')
     : `<div style="width:180px;height:180px;border:1px dashed #6fb8dd;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;flex:none">Kein Foto</div>`;
-  const vp=verkaufspreis(a.bruttopreis);
+  const vp=verkaufspreisFuerArtikel(a);
   return `<div class="mb-untermotiv-box vk-print-item">
     <div style="display:flex;gap:14px">
       <div style="width:186px;flex:none;display:flex;gap:6px;flex-wrap:wrap;justify-content:center">${imgsHtml}</div>
@@ -3213,7 +3236,7 @@ function renderVerkaufslistePrint(){
         <button class="btn btn-sm" data-action="set-view" data-view="verkaufsliste-edit">${ic('back')} Zurück zum Bearbeiten</button>
         <button class="btn btn-primary btn-sm" data-action="do-print">${ic('download')} Als PDF drucken/speichern</button>
       </div>
-      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Maximal 3 Artikel pro Seite, Fotos groß und gut sichtbar. Der Verkaufspreis wird automatisch mit 60% des Bruttopreises berechnet. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" und „Ränder: Keine" wählen.</div>
+      <div class="info-box no-print" style="max-width:210mm;margin:0 auto 12px">Maximal 3 Artikel pro Seite, Fotos groß und gut sichtbar. Der Verkaufspreis wird automatisch mit ${vkFaktorPercent(vl)}% des Bruttopreises berechnet. Beim Drucken/Speichern als PDF bitte „Skalierung: 100 %" und „Ränder: Keine" wählen.</div>
       ${pages.length?pages.map((pageItems,i)=>`
         <div class="mb-sheet" style="${escapeAttr(motivblattStyleAttr())}">
           ${vkPageHeaderHTML(vl,i===0)}
